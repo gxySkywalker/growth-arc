@@ -1,0 +1,59 @@
+{
+  "name": "growth-arc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A private, local-first learning and focus system",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "tsc -p tsconfig.app.json && vite build",
+    "start": "npm run build && electron .",
+    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts",
+    "test:watch": "vitest",
+    "dist": "npm run build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.personal.growtharc",
+    "productName": "成长轨迹",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "sharp": "^0.35.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10",
+    "wait-on": "^9.0.10"
+  },
+  "author": "Personal Learning System"
+}
