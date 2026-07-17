@@ -255,6 +255,9 @@ export interface GrowthArcApi {
   ai: {
     generate: (type: 'daily' | 'weekly', date: string) => Promise<{ report: AiReport; model: string }>
   }
+  inventory: {
+    use: (itemId: string) => Promise<{ consumed: boolean; itemId: string; effect: string }>
+  }
 }
 
 declare global {
