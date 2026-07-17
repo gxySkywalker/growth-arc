@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Notification, Menu, Tray, nativeImage, safeStorage, shell, powerMonitor } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
+const { ProxyAgent } = require('undici')
 const { StudyDatabase } = require('./database.cjs')
 
 let mainWindow
@@ -97,30 +98,54 @@ function parseResponseText(response) {
 
 async function generateAiReport(type, date) {
   const apiKey = readApiKey()
-  if (!apiKey) throw new Error('请先在设置中配置 OpenAI API Key')
+  if (!apiKey) throw new Error('请先在设置中配置 API Key')
   const settings = database.getSettings()
-  const model = settings.model || 'gpt-5.6-luna'
+  const provider = settings.api_provider || 'openai'
+  const proxyUrl = settings.proxy_url || ''
+  const fetchOptions = {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+  }
+  if (proxyUrl) fetchOptions.dispatcher = new ProxyAgent(proxyUrl)
   const payload = database.getAiPayload(type, date)
   const periodName = type === 'daily' ? '日复盘' : '周成长报告'
+
+  if (provider === 'deepseek') {
+    const model = settings.model || 'deepseek-chat'
+    const schemaDesc = `返回严格 JSON：{"summary":"一段温和总结","wins":["最多4条"],"patterns":["最多4条"],"risks":["最多3条"],"suggestions":["最多3条"],"next_focus":"一个足够小的下一步"}`
+    const body = {
+      model,
+      max_tokens: 1600,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: `你是一位温和但诚实的个人学习教练。只根据给定数据总结，不制造焦虑，不使用连续打卡压力。用简洁中文指出真实成果、可观察规律和一个足够小的下一步。\n${schemaDesc}` },
+        { role: 'user', content: `请生成${periodName}。学习数据如下：\n${JSON.stringify(payload)}` },
+      ],
+    }
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', { ...fetchOptions, body: JSON.stringify(body) })
+    const json = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(json?.error?.message || `请求失败（HTTP ${response.status}）`)
+    let report
+    try {
+      report = JSON.parse(json.choices[0].message.content)
+    } catch (error) {
+      throw new Error(`AI 报告格式无效：${error.message}`)
+    }
+    database.saveAiReport(type, date, report, model)
+    return { report, model }
+  }
+
+  // OpenAI path (default)
+  const model = settings.model || 'gpt-5.6-luna'
   const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    ...fetchOptions,
     body: JSON.stringify({
       model,
       store: false,
       max_output_tokens: 1600,
       input: [
-        {
-          role: 'system',
-          content: [{ type: 'input_text', text: '你是一位温和但诚实的个人学习教练。只根据给定数据总结，不制造焦虑，不使用连续打卡压力。用简洁中文指出真实成果、可观察规律和一个足够小的下一步。' }],
-        },
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: `请生成${periodName}。学习数据如下：\n${JSON.stringify(payload)}` }],
-        },
+        { role: 'system', content: [{ type: 'input_text', text: '你是一位温和但诚实的个人学习教练。只根据给定数据总结，不制造焦虑，不使用连续打卡压力。用简洁中文指出真实成果、可观察规律和一个足够小的下一步。' }] },
+        { role: 'user', content: [{ type: 'input_text', text: `请生成${periodName}。学习数据如下：\n${JSON.stringify(payload)}` }] },
       ],
       text: {
         format: {
@@ -145,16 +170,10 @@ async function generateAiReport(type, date) {
     }),
   })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const detail = body?.error?.message || `请求失败（HTTP ${response.status}）`
-    throw new Error(detail)
-  }
+  if (!response.ok) throw new Error(body?.error?.message || `请求失败（HTTP ${response.status}）`)
   let report
-  try {
-    report = JSON.parse(parseResponseText(body))
-  } catch (error) {
-    throw new Error(`AI 报告格式无效：${error.message}`)
-  }
+  try { report = JSON.parse(parseResponseText(body)) }
+  catch (error) { throw new Error(`AI 报告格式无效：${error.message}`) }
   database.saveAiReport(type, date, report, model)
   return { report, model }
 }
@@ -199,6 +218,7 @@ function registerHandlers() {
   handle('settings:clear-api-key', () => { clearApiKey(); return true })
   handle('settings:open-data-folder', async () => shell.openPath(database.openDataPath()))
   handle('ai:generate', ({ type, date }) => generateAiReport(type, date))
+  handle('inventory:use', (itemId) => database.useItem(itemId))
   ipcMain.on('window:show', showWindow)
 }
 

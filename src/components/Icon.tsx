@@ -24,6 +24,14 @@ const paths: Record<string, React.ReactNode> = {
   arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
   folder: <path d="M3 6h7l2 2h9v11H3Z"/>,
   brain: <><path d="M9 5a3 3 0 0 0-5 2 3 3 0 0 0 0 5 4 4 0 0 0 5 6M15 5a3 3 0 0 1 5 2 3 3 0 0 1 0 5 4 4 0 0 1-5 6"/><path d="M9 4v16M15 4v16M9 9h3M12 15h3"/></>,
+  coin: <><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 7v10M9 10h6"/></>,
+  map: <><path d="M3 6h12l4-2v14l-4-2-6 2-6-2V6z"/><path d="M9 4v14M15 4v14"/></>,
+  herb: <><path d="M12 22V12"/><path d="M12 12C12 6 7 4 5 8s2 8 7 7"/><path d="M12 12c0-6 5-8 7-4s-2 8-7 7"/></>,
+  bread: <><path d="M4 14c0-4 4-7 8-7s8 3 8 7c0 3-2 5-5 5H9c-3 0-5-2-5-5z"/><path d="M7 14c0-2 2-3 5-3s5 1 5 3"/></>,
+  gem: <><path d="m12 2 4 8-4 12-4-12z"/><path d="M8 10h8M6 14l3-4M18 14l-3-4M8 8l4 10M16 8l-4 10"/></>,
+  star: <path d="m12 2 2.5 7.5L22 9l-5.5 4L19 20.5l-7-4.5-7 4.5 2.5-7.5L2 9l7.5.5z"/>,
+  bell: <><path d="M6 8a6 6 0 0 1 12 0c0 6 2 8 2 8H4s2-2 2-8"/><path d="M9 20h6M12 20v2"/></>,
+  scale: <><path d="M12 2 4 8l2 12h12l2-12z"/><path d="M12 8v12M8 12h8"/></>,
 }
 
 export function Icon({ name, size = 20, ...props }: { name: string; size?: number } & SVGProps<SVGSVGElement>) {

@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('growthArc', {
   ai: {
     generate: (type, date) => invoke('ai:generate', { type, date }),
   },
+  inventory: {
+    use: (itemId) => invoke('inventory:use', itemId),
+  },
   window: {
     show: () => ipcRenderer.send('window:show'),
   },

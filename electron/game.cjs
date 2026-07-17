@@ -154,7 +154,7 @@ function seededRandom(seed) {
   }
 }
 
-function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity = 0, ownedSpeciesIds = [] }) {
+function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity = 0, ownedSpeciesIds = [], rareBoost = false }) {
   const tier = durationTier(activeSeconds)
   const random = seededRandom(String(sessionId) + ':' + activeSeconds)
   const common = LOOT.filter((item) => item.rarity === 'common')
@@ -167,7 +167,8 @@ function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity 
     else drops.push({ item, quantity: 1 })
   }
 
-  const rareChance = Math.min(0.65, tier.rareChance + Math.max(0, Number(rarePity) - 4) * 0.03)
+  const boost = rareBoost ? 0.10 : 0
+  const rareChance = Math.min(0.65, tier.rareChance + Math.max(0, Number(rarePity) - 4) * 0.03 + boost)
   const rareFound = tier.rareChance > 0 && (Number(rarePity) >= 9 || random() < rareChance)
   if (rareFound) drops.push({ item: rare[Math.floor(random() * rare.length)], quantity: 1 })
 

@@ -29,8 +29,10 @@ export function FocusController() {
 
   useEffect(() => {
     snapshotAt.current = Date.now()
-    const timer = window.setInterval(() => setTick(Date.now()), 1000)
-    return () => window.clearInterval(timer)
+    let raf = 0
+    const loop = () => { setTick(Date.now()); raf = requestAnimationFrame(loop) }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
   }, [activeSession?.id, activeSession?.status])
 
   useEffect(() => {
@@ -204,7 +206,7 @@ export function FocusController() {
       </div>
       <div className="modal-body reward-body">
         <header><div><small>本次收获</small><h3>{expedition.rareFound ? '宝箱里闪着少见的光' : '行囊装得满满当当'}</h3></div><span>羁绊 +{expedition.bondXp}</span></header>
-        <div className="reward-grid">{expedition.drops.map((drop) => <article className={drop.item.rarity} key={drop.item.id}><span>{drop.item.rarity === 'rare' ? '✦' : '◆'}</span><div><small>{drop.item.rarity === 'rare' ? '稀有宝藏' : '常规掉落'}</small><strong>{drop.item.name}</strong><p>{drop.item.description}</p></div><b>×{drop.quantity}</b></article>)}</div>
+        <div className="reward-grid">{expedition.drops.map((drop) => <article className={drop.item.rarity} key={drop.item.id}><span><Icon name={drop.item.icon} size={20} style={{ color: drop.item.rarity === 'rare' ? 'var(--gold)' : 'inherit' }} /></span><div><small>{drop.item.rarity === 'rare' ? '稀有宝藏' : '常规掉落'}</small><strong>{drop.item.name}</strong><p>{drop.item.description}</p></div><b>×{drop.quantity}</b></article>)}</div>
         {expedition.newCompanion && <div className="new-friend"><PixelCompanion companion={expedition.newCompanion} size="medium" /><div><small>旅途中传来了新的脚步声</small><h3>遇见了 {expedition.newCompanion.species.name}</h3><p>{expedition.newCompanion.species.description}</p></div></div>}
         {expedition.knowledgeRelic && <div className="relic-return"><span>▤</span><div><small>知识遗物已经归档</small><strong>{expedition.knowledgeRelic.title}</strong><p>{expedition.knowledgeRelic.content}</p></div></div>}
       </div>

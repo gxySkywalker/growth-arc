@@ -193,6 +193,8 @@ class StudyDatabase {
       world_name: '炉火营地',
       rare_pity: '0',
       companion_pity: '0',
+      api_provider: 'openai',
+      proxy_url: '',
     }
     for (const [key, value] of Object.entries(defaults)) {
       this.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value], false)
@@ -250,7 +252,7 @@ class StudyDatabase {
   setSettings(values) {
     this.transaction(() => {
       for (const [key, value] of Object.entries(values)) {
-        if (!['user_name', 'model', 'theme', 'accent', 'world_name', 'birthday'].includes(key)) continue
+        if (!['user_name', 'model', 'theme', 'accent', 'world_name', 'birthday', 'proxy_url', 'api_provider'].includes(key)) continue
         this.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)], false)
       }
     })
@@ -447,13 +449,16 @@ class StudyDatabase {
     if (existing) return existing
     const settings = this.getSettings()
     const ownedSpeciesIds = this.all('SELECT species_id FROM companions').map((row) => row.species_id)
+    const rareBoost = Number(settings.rare_boost || 0) > 0
     const rolled = rollExpedition({
       sessionId,
       activeSeconds,
       rarePity: Number(settings.rare_pity || 0),
       companionPity: Number(settings.companion_pity || 0),
       ownedSpeciesIds,
+      rareBoost,
     })
+    if (rareBoost) this.run("DELETE FROM settings WHERE key = 'rare_boost'", [], false)
 
     for (const drop of rolled.drops) {
       this.run(`INSERT INTO inventory (item_id, quantity, first_found_at, updated_at)
@@ -603,6 +608,36 @@ class StudyDatabase {
       ...row,
       item: LOOT.find((item) => item.id === row.item_id) || { id: row.item_id, name: '未知物品', rarity: 'common', icon: 'box', description: '' },
     }))
+  }
+
+  useItem(itemId) {
+    const entry = this.one('SELECT * FROM inventory WHERE item_id = ?', [itemId])
+    if (!entry || Number(entry.quantity) <= 0) throw new Error('物品不足')
+    const now = Date.now()
+    let effect = ''
+
+    if (itemId === 'berry_bread') {
+      const active = this.one('SELECT * FROM companions WHERE is_active = 1')
+      if (!active) throw new Error('没有同行伙伴可以分享面包')
+      const newBond = Number(active.bond_xp) + 10
+      const stage = companionStage(newBond, active.evolution_path)
+      this.run('UPDATE companions SET bond_xp = ?, stage = ? WHERE id = ?', [newBond, stage, active.id], false)
+      effect = `${active.nickname || '伙伴'}的羁绊 +10`
+    } else if (itemId === 'copper_coin') {
+      this.insertXp('item', 5, 'item', itemId, '使用旧王朝铜币', false)
+      effect = '经验 +5'
+    } else if (itemId === 'map_scrap') {
+      this.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['rare_boost', '1'], false)
+      effect = '下次远征稀有发现概率提升'
+    } else if (itemId === 'herb_bundle') {
+      throw new Error('药草暂时还不能使用，等精力系统完善后再来')
+    } else {
+      throw new Error('这件物品暂时无法使用')
+    }
+
+    this.run('UPDATE inventory SET quantity = quantity - 1, updated_at = ? WHERE item_id = ?', [now, itemId])
+    this.save()
+    return { consumed: true, itemId, effect }
   }
 
   getKnowledgeRelics(limit = 8) {

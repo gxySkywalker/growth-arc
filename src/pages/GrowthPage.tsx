@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { PixelCompanion } from '../components/PixelCompanion'
 import { friendlyError } from '../lib/format'
+import { Icon } from '../components/Icon'
 
 export function GrowthPage() {
   const { dashboard, refresh, notify } = useApp()
@@ -67,7 +68,7 @@ export function GrowthPage() {
       </article>
       <article className="parchment-card backpack-card">
         <header><div><span className="card-sigil">▣</span><div><small>共同背包</small><h2>远征收藏</h2></div></div><span className="soft-count">{inventory.reduce((sum, entry) => sum + Number(entry.quantity), 0)} 件</span></header>
-        <div>{inventory.slice(0, 8).map((entry) => <div className={entry.item.rarity} key={entry.item_id}><span>{entry.item.rarity === 'rare' ? '✦' : '◆'}</span><strong>{entry.item.name}</strong><b>×{entry.quantity}</b></div>)}{inventory.length === 0 && <p className="empty-copy">第一次返航后，宝藏会被整齐收在这里。</p>}</div>
+        <div>{inventory.slice(0, 8).map((entry) => <div className={entry.item.rarity} key={entry.item_id} style={{cursor:'pointer'}} onClick={async () => { if (!window.confirm(`使用「${entry.item.name}」吗？`)) return; try { const r = await window.growthArc.inventory.use(entry.item_id); notify(r.effect, 'success'); await refresh() } catch (e) { notify(friendlyError(e), 'error') } }} title={`点击使用 —— ${entry.item.description}`}><span><Icon name={entry.item.icon} size={18} style={{ color: entry.item.rarity === 'rare' ? 'var(--gold)' : 'inherit' }} /></span><strong>{entry.item.name}</strong><b>×{entry.quantity}</b></div>)}{inventory.length === 0 && <p className="empty-copy">第一次返航后，宝藏会被整齐收在这里。</p>}</div>
       </article>
     </section>
   </div>
