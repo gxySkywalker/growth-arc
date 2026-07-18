@@ -8,7 +8,7 @@ import type { ExpeditionResult } from '../types'
 
 const DURATION_OPTIONS = [15, 25, 45, 60, 90]
 
-export function FocusController() {
+export function FocusController({ showLauncher = true }: { showLauncher?: boolean }) {
   const { activeSession, setActiveSession, structure, dashboard, refresh, notify } = useApp()
   const [startOpen, setStartOpen] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
@@ -19,8 +19,6 @@ export function FocusController() {
   const [companionId, setCompanionId] = useState('')
   const [plannedMinutes, setPlannedMinutes] = useState(25)
   const [outcome, setOutcome] = useState('')
-  const [blocker, setBlocker] = useState('')
-  const [nextStep, setNextStep] = useState('')
   const [taskCompleted, setTaskCompleted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [tick, setTick] = useState(Date.now())
@@ -96,7 +94,7 @@ export function FocusController() {
       snapshotAt.current = Date.now()
       setActiveSession(session)
       setStartOpen(false)
-      notify('城门已经打开。接下来只需要专注赶路。', 'success')
+      notify('城门已经打开。现在只需安心赶路。', 'success')
       await refresh()
     } catch (error) { notify(friendlyError(error), 'error') }
     finally { setBusy(false) }
@@ -117,11 +115,11 @@ export function FocusController() {
     if (!activeSession) return
     setBusy(true)
     try {
-      const result = await window.growthArc.session.stop(activeSession.id, { outcome, blocker, nextStep, taskCompleted })
+      const result = await window.growthArc.session.stop(activeSession.id, { outcome, blocker: '', nextStep: '', taskCompleted })
       setActiveSession(null)
       setStopOpen(false)
       setExpedition(result.expedition)
-      setOutcome(''); setBlocker(''); setNextStep(''); setTaskCompleted(false)
+      setOutcome(''); setTaskCompleted(false)
       await refresh()
     } catch (error) { notify(friendlyError(error), 'error') }
     finally { setBusy(false) }
@@ -167,7 +165,7 @@ export function FocusController() {
         </div>
       </div>
       <footer className="focus-whisper">随机事件正在旅途中安静发生，返航时再一起翻开日志。</footer>
-    </section> : <button className="floating-focus" onClick={() => openStart()}><Icon name="play" size={18} />开始远征</button>}
+    </section> : showLauncher ? <button className="floating-focus" onClick={() => openStart()}><Icon name="play" size={18} />开始远征</button> : null}
 
     {startOpen && <Modal title="准备下一次远征" onClose={() => setStartOpen(false)} size="wide">
       <div className="modal-body expedition-setup">
@@ -181,17 +179,16 @@ export function FocusController() {
           <label>这次只推进什么？<input autoFocus value={content} onChange={(event) => setContent(event.target.value)} placeholder="例如：读完第三章并整理两个例题" /></label></>}
           <fieldset><legend>计划走多远</legend><div className="duration-picks">{DURATION_OPTIONS.map((minutes) => <button type="button" className={plannedMinutes === minutes ? 'selected' : ''} key={minutes} onClick={() => setPlannedMinutes(minutes)}><strong>{minutes}</strong><span>分钟</span></button>)}</div><small>时长越长，稀有发现概率越高；90分钟后不再增加。</small></fieldset>
         </div>
-        <aside className="companion-pick"><span>同行伙伴</span><PixelCompanion companion={companions.find((item) => item.id === companionId) || dashboard?.world.companions.active || null} size="medium" /><select value={companionId} onChange={(event) => setCompanionId(event.target.value)}>{companions.map((item) => <option key={item.id} value={item.id}>{item.nickname} · {item.stageName}</option>)}</select><p>本次远征会增加羁绊，并留下属于你们的共同记录。</p></aside>
+        <aside className="companion-pick"><span>本次同行伙伴</span><PixelCompanion companion={companions.find((item) => item.id === companionId) || dashboard?.world.companions.active || null} size="medium" /><select value={companionId} onChange={(event) => setCompanionId(event.target.value)}>{companions.map((item) => <option key={item.id} value={item.id}>{item.nickname} · {item.stageName}</option>)}</select><p>默认沿用常伴伙伴，但每次出发都可以重新选择。本次远征会增加你们之间的羁绊。</p></aside>
       </div>
       <footer className="modal-footer"><button className="button button-ghost" onClick={() => setStartOpen(false)}>再准备一下</button><button className="button button-primary" disabled={busy || (!taskId && (!content.trim() || !areaId))} onClick={start}><Icon name="play" />穿过城门</button></footer>
     </Modal>}
 
     {stopOpen && activeSession && <Modal title="整理这次带回的东西" onClose={() => setStopOpen(false)} size="wide">
       <div className="session-summary-strip"><div><span>远征目标</span><strong>{activeSession.content}</strong></div><div><span>有效专注</span><strong>{formatClock(elapsed)}</strong></div></div>
-      <div className="modal-body form-stack two-column-form">
-        <label className="span-2">这次真正带回了什么？<textarea autoFocus rows={3} value={outcome} onChange={(event) => setOutcome(event.target.value)} placeholder="写下一句成果或新理解，它会成为知识遗物" /></label>
-        <label>仍然困惑的地方（可选）<textarea rows={2} value={blocker} onChange={(event) => setBlocker(event.target.value)} placeholder="下次可以继续探索" /></label>
-        <label>下一次从哪里出发（可选）<textarea rows={2} value={nextStep} onChange={(event) => setNextStep(event.target.value)} placeholder="给未来的自己留一条路标" /></label>
+      <div className="modal-body form-stack">
+        <label>这次完成了什么？<textarea autoFocus rows={3} value={outcome} onChange={(event) => setOutcome(event.target.value)} placeholder="只需写下已经完成的事" /></label>
+        <p className="settlement-note">这里不安排下一次行动。想记录学习内容时，可以之后自愿写进冒险日志。</p>
         {activeSession.task_id && <label className="check-row span-2"><input type="checkbox" checked={taskCompleted} onChange={(event) => setTaskCompleted(event.target.checked)} /><span><strong>地图上的这项任务已经完成</strong><small>确认后会归档，并结算对应经验。</small></span></label>}
       </div>
       <footer className="modal-footer split-footer"><button className="button button-danger-ghost" onClick={cancel}>空手提前返回</button><div><button className="button button-ghost" onClick={() => setStopOpen(false)}>再走一会儿</button><button className="button button-primary" disabled={busy} onClick={stop}><Icon name="home" />回到小屋</button></div></footer>

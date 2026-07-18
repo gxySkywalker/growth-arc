@@ -1,0 +1,137 @@
+.main-content.cottage-main-content {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(122, 73, 39, .25), transparent 44%),
+    linear-gradient(90deg, rgba(255, 224, 174, .025) 1px, transparent 1px) 0 0 / 24px 24px,
+    #21150f;
+}
+
+.page.cottage-world-page {
+  width: calc(100% - 28px);
+  max-width: 1580px;
+  min-height: 100vh;
+  padding: 16px 0 28px;
+}
+
+.cottage-world-header {
+  width: min(100%, calc((100vh - 122px) * 1.7778));
+  min-width: 720px;
+  min-height: 58px;
+  margin: 0 auto 10px;
+  padding: 8px 9px 8px 11px;
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  color: #ead9bc;
+  background:
+    linear-gradient(180deg, rgba(255, 234, 199, .035), transparent),
+    #302017;
+  border: 3px solid #67432c;
+  box-shadow: inset 0 0 0 1px #1b100b, 0 8px 22px rgba(12, 7, 4, .3);
+}
+
+.cottage-world-identity { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.cottage-world-sigil {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #ffd792;
+  background: #6f3d26;
+  border: 2px solid #a96d3d;
+  box-shadow: inset 0 0 0 2px #3a2015;
+}
+.cottage-world-identity > div { min-width: 0; }
+.cottage-world-identity small { display: block; margin-bottom: 2px; color: #b99b79; font-size: 9px; letter-spacing: .6px; }
+.cottage-world-header h1 { margin: 0; overflow: hidden; color: #f3e2c4; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+.cottage-world-actions { display: flex; gap: 8px; }
+.cottage-world-vitals {
+  min-width: 148px;
+  padding: 0 17px;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 7px;
+  border-left: 1px solid rgba(230, 197, 154, .15);
+  border-right: 1px solid rgba(230, 197, 154, .15);
+  text-align: right;
+}
+.cottage-world-vitals small { color: #a98c6d; font-size: 9px; }
+.cottage-world-vitals strong { color: #f3d89e; font-size: 14px; }
+.cottage-world-vitals span { grid-column: 1 / -1; color: #8fa271; font-size: 9px; }
+.button-secondary { color: #5c402e; background: #f1dfbd; border-color: #c9aa7d; box-shadow: 0 3px 0 #b39164; }
+.world-menu-button, .world-expedition-button { min-height: 34px; padding: 0 13px; border-radius: 0; box-shadow: 0 3px 0 #1d100a; font-size: 12px; }
+.world-menu-button { color: #ead6b5; background: #493020; border: 2px solid #82573a; }
+.world-expedition-button { color: #fff0c9; background: #9f552f; border: 2px solid #60301f; }
+.world-menu-button:hover, .world-expedition-button:hover { filter: brightness(1.08); }
+
+.cottage-world-stage {
+  position: relative;
+  width: min(100%, calc((100vh - 122px) * 1.7778));
+  min-width: 720px;
+  margin: 0 auto;
+}
+
+.cottage-world-stage .cottage-scene-shell { position: relative; }
+.cottage-world-stage .cottage-scene { border: 5px solid #593722; box-shadow: 0 0 0 3px #a46a3b, 0 0 0 7px #2a180f, 0 18px 42px rgba(48, 27, 15, .28); }
+.cottage-world-stage .cottage-scene:focus { box-shadow: 0 0 0 3px #dda55f, 0 0 0 7px #2a180f, 0 18px 42px rgba(48, 27, 15, .28); }
+
+.cottage-world-dialogue {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  bottom: 15px;
+  width: min(760px, 72%);
+  min-height: 84px;
+  padding: 12px 76px 12px 14px;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  align-items: center;
+  color: #f3dfbd;
+  background: rgba(42, 25, 16, .94);
+  border: 3px solid #aa7548;
+  box-shadow: inset 0 0 0 2px #24140d, 5px 6px 0 rgba(20, 11, 7, .52);
+  text-align: left;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.dialogue-heart { width: 30px; height: 30px; display: grid; place-items: center; color: #d88a55; background: #52301d; border: 1px solid #8d5b38; }
+.cottage-world-dialogue > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cottage-world-dialogue strong { display: flex; flex-direction: column; font-size: 12px; }
+.cottage-world-dialogue small { color: #bda384; font-size: 9px; font-weight: 400; }
+.cottage-world-dialogue em { color: #e9d5b5; font-size: 12px; font-style: normal; line-height: 1.5; }
+.cottage-world-dialogue > i { position: absolute; right: 14px; bottom: 11px; color: #c69a6c; font-size: 9px; font-style: normal; }
+
+.overview-expedition-card {
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: #f6e8cc;
+  background: linear-gradient(110deg, #3d281b, #2c1c13);
+  border: 4px solid #6e472e;
+  box-shadow: inset 0 0 0 2px #24150e, 0 9px 24px rgba(63, 38, 22, .15);
+}
+
+.overview-expedition-card h2 { margin: 5px 0; color: #fff1d3; font-size: 23px; }
+.overview-expedition-card p { margin: 0; color: #cbb398; font-size: 12px; }
+.overview-expedition-actions { display: flex; gap: 10px; flex: 0 0 auto; }
+
+@media (max-width: 1180px) {
+  .cottage-world-stage, .cottage-world-header { width: 100%; min-width: 0; }
+  .cottage-world-header { grid-template-columns: minmax(240px, 1fr) auto; }
+  .cottage-world-vitals { display: none; }
+  .cottage-world-dialogue { width: 76%; }
+}
+
+@media (max-width: 900px) {
+  .cottage-world-header { grid-template-columns: 1fr auto; }
+  .cottage-world-identity small { display: none; }
+  .cottage-world-dialogue { width: 82%; min-height: 72px; }
+  .overview-expedition-card { align-items: stretch; flex-direction: column; }
+  .overview-expedition-actions { align-self: end; }
+}

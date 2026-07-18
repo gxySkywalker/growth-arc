@@ -38,7 +38,7 @@ export function HistoryPage() {
         <div>{items.map((session) => <article className="history-session" key={session.id}>
           <div className="timeline-mark" style={{ borderColor: session.area_color || '#8b9cff' }} />
           <time>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(session.started_at))}</time>
-          <div className="history-copy"><div><strong>{session.content}</strong><span><i style={{ background: session.area_color }} />{session.area_name || '未分类'}</span></div>{session.outcome && <p><b>成果</b>{session.outcome}</p>}{session.blocker && <p className="history-blocker"><b>困难</b>{session.blocker}</p>}{session.next_step && <p><b>下一步</b>{session.next_step}</p>}</div>
+          <div className="history-copy"><div><strong>{session.content}</strong><span><i style={{ background: session.area_color }} />{session.area_name || '未分类'}</span></div>{session.outcome && <p><b>成果</b>{session.outcome}</p>}{session.blocker && <p className="history-blocker"><b>困难</b>{session.blocker}</p>}{session.next_step && <p><b>留下的路标</b>{session.next_step}</p>}</div>
           <strong className="history-duration">{formatDuration(session.active_seconds, true)}</strong>
         </article>)}</div>
       </section>) : <div className="empty-state tall"><Icon name="history" size={32} /><strong>时间线还没有内容</strong><span>完成第一次专注后，属于你的学习轨迹会从这里开始。</span></div>}

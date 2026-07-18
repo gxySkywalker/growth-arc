@@ -4,6 +4,10 @@ const invoke = (channel, payload) => ipcRenderer.invoke(channel, payload)
 
 contextBridge.exposeInMainWorld('growthArc', {
   dashboard: () => invoke('dashboard:get'),
+  world: {
+    get: () => invoke('world:get'),
+    updatePlayer: (data) => invoke('player:update', data),
+  },
   structure: {
     get: () => invoke('structure:get'),
     createArea: (data) => invoke('area:create', data),

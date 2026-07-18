@@ -9,7 +9,7 @@ export function AiReportCard({ report, model }: { report: AiReport; model?: stri
       <section><h4>这段时间做得好的</h4><ul>{report.wins.map((item, index) => <li key={index}>{item}</li>)}</ul></section>
       <section><h4>可以观察的规律</h4><ul>{report.patterns.map((item, index) => <li key={index}>{item}</li>)}</ul></section>
       {report.risks.length > 0 && <section><h4>值得留意</h4><ul>{report.risks.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}
-      <section><h4>下一步建议</h4><ul>{report.suggestions.map((item, index) => <li key={index}>{item}</li>)}</ul></section>
+      <section><h4>可以留意的事</h4><ul>{report.suggestions.map((item, index) => <li key={index}>{item}</li>)}</ul></section>
     </div>
     <footer><Icon name="arrow" /><span>建议优先做：<strong>{report.next_focus}</strong></span></footer>
   </article>

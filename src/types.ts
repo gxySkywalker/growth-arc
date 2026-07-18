@@ -1,4 +1,4 @@
-export type PageId = 'home' | 'plan' | 'history' | 'review' | 'growth' | 'settings'
+export type PageId = 'home' | 'overview' | 'plan' | 'history' | 'review' | 'growth' | 'settings'
 
 export interface Area {
   id: string
@@ -109,6 +109,114 @@ export interface KnowledgeRelic {
   created_at: number
 }
 
+export interface PlayerProfile {
+  id: 'primary'
+  display_name: string
+  body_type: string
+  skin_tone: string
+  hair_style: string
+  hair_color: string
+  outfit_id: string
+  outfit_tint: string
+  cape_enabled: boolean
+  intro_status: 'unseen' | 'available' | 'seen' | 'skipped'
+  intro_seen_at: number | null
+  customized_at: number | null
+  created_from_legacy: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface PlayerProfilePatch {
+  displayName?: string
+  bodyType?: string
+  skinTone?: string
+  hairStyle?: string
+  hairColor?: string
+  outfitId?: string
+  outfitTint?: string
+  capeEnabled?: boolean
+  introStatus?: PlayerProfile['intro_status']
+}
+
+export type WorldDiscoveryState = 'hidden' | 'rumored' | 'discovered'
+
+export interface WorldRegion {
+  id: string
+  name: string
+  layer: number
+  description: string
+  sort_order: number
+  state: WorldDiscoveryState
+  discovered_at: number | null
+}
+
+export interface WorldNode {
+  id: string
+  region_id: string
+  kind: string
+  name: string
+  description: string
+  map_x: number
+  map_y: number
+  sort_order: number
+  state: WorldDiscoveryState
+  discovered_at: number | null
+  discovery_session_id: string | null
+}
+
+export interface WorldEdge {
+  id: string
+  from_node_id: string
+  to_node_id: string
+  distance: number
+  state: WorldDiscoveryState
+  discovered_at: number | null
+  discovery_session_id: string | null
+}
+
+export interface WorldDiscovery {
+  id: string
+  discovery_key: string
+  kind: 'region' | 'node' | 'edge'
+  target_id: string
+  session_id: string | null
+  event_id: string | null
+  metadata_json: string
+  metadata: Record<string, unknown>
+  created_at: number
+}
+
+export interface WorldEvent {
+  id: string
+  event_key: string
+  definition_id: string
+  definition_version: number
+  status: string
+  session_id: string | null
+  payload_json: string
+  payload: Record<string, unknown>
+  occurred_at: number
+  resolved_at: number | null
+}
+
+export interface WorldFoundation {
+  content: {
+    namespace: string
+    version: string
+    installed_at?: number
+    updated_at?: number
+  }
+  player: PlayerProfile
+  map: {
+    regions: WorldRegion[]
+    nodes: WorldNode[]
+    edges: WorldEdge[]
+    discoveries: WorldDiscovery[]
+  }
+  recentEvents: WorldEvent[]
+}
+
 export interface ExpeditionResult {
   sessionId: string
   tier: { id: string; name: string; rareChance: number; companionChance: number; commonCount: number }
@@ -127,6 +235,7 @@ export interface ExpeditionResult {
 
 export interface WorldState {
   name: string
+  foundation: WorldFoundation
   companions: CompanionCollection
   inventory: Array<{ item_id: string; quantity: number; item: LootItem; updated_at: number }>
   relics: KnowledgeRelic[]
@@ -215,6 +324,10 @@ export interface WeeklyReportData {
 
 export interface GrowthArcApi {
   dashboard: () => Promise<Dashboard>
+  world: {
+    get: () => Promise<WorldFoundation>
+    updatePlayer: (data: PlayerProfilePatch) => Promise<PlayerProfile>
+  }
   structure: {
     get: () => Promise<Structure>
     createArea: (data: { name: string; color: string }) => Promise<Area>

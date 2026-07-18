@@ -11,10 +11,10 @@ export function GrowthPage() {
   const { companions, inventory } = dashboard.world
   const selected = companions.owned.find((item) => item.id === selectedId) || companions.active || companions.owned[0] || null
 
-  const travelWith = async (id: string) => {
+  const setAsHomeCompanion = async (id: string) => {
     try {
       await window.growthArc.companions.setActive(id)
-      notify('同行伙伴已经换好行囊。', 'success')
+      notify('常伴伙伴已经来到炉火小屋。下一次远征仍可以另外选择同行伙伴。', 'success')
       await refresh()
     } catch (error) { notify(friendlyError(error), 'error') }
   }
@@ -29,14 +29,14 @@ export function GrowthPage() {
   }
 
   return <div className="page companions-page">
-    <header className="page-heading cozy-heading"><div><span className="day-ribbon">伙伴营地</span><h1>每一次同行，都会留下变化。</h1><p>伙伴不是装备。他们会记得一起走过的远征，也会在足够深的羁绊中选择新的形态。</p></div><div className="collection-count"><strong>{companions.owned.length}</strong><span>/ {companions.total} 已相遇</span></div></header>
+    <header className="page-heading cozy-heading"><div><span className="day-ribbon">伙伴营地</span><h1>每一次同行，都会留下变化。</h1><p>常伴伙伴会住在炉火小屋，并且可以随时更换；每次远征出发前，仍可以单独选择本次同行的伙伴。</p></div><div className="collection-count"><strong>{companions.owned.length}</strong><span>/ {companions.total} 已相遇</span></div></header>
 
     <section className="companion-camp">
       <aside className="companion-list">
         {companions.owned.map((companion) => <button key={companion.id} onClick={() => setSelectedId(companion.id)} className={selected?.id === companion.id ? 'selected' : ''}>
           <PixelCompanion companion={companion} size="small" />
           <span><strong>{companion.nickname}</strong><small>{companion.stageName}</small></span>
-          {companion.is_active ? <b>同行中</b> : null}
+          {companion.is_active ? <b>常伴</b> : null}
         </button>)}
       </aside>
 
@@ -48,7 +48,7 @@ export function GrowthPage() {
           <h3>{selected.stageName} · {selected.species.kind}</h3>
           <p>{selected.species.description}</p>
           <div className="bond-block"><div><span>羁绊</span><strong>{selected.bond_xp} / {selected.stage === 2 ? selected.bond_xp : selected.nextBondXp}</strong></div><div className="bond-track"><i style={{ width: `${selected.stage === 2 ? 100 : Math.min(100, selected.bond_xp / selected.nextBondXp * 100)}%` }} /></div><small>{selected.evolutionReady ? '已经准备好选择最终的成长方向。' : selected.stage === 2 ? '这段关系还会继续写下新的故事。' : '带它参加远征，就能慢慢加深羁绊。'}</small></div>
-          {!selected.is_active && <button className="button button-primary" onClick={() => void travelWith(selected.id)}>邀请它同行</button>}
+          {!selected.is_active && <button className="button button-primary" onClick={() => void setAsHomeCompanion(selected.id)}>设为常伴伙伴</button>}
         </div>
       </article>}
     </section>
