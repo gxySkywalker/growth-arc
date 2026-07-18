@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext'
 import { FocusController } from './components/FocusController'
 import { Icon } from './components/Icon'
 import { HomePage } from './pages/HomePage'
+import { CottagePage } from './pages/CottagePage'
 import { PlanPage } from './pages/PlanPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { ReviewPage } from './pages/ReviewPage'
@@ -12,6 +13,7 @@ import type { PageId } from './types'
 
 const NAV: Array<{ id: PageId; label: string; icon: string }> = [
   { id: 'home', label: '炉火小屋', icon: 'home' },
+  { id: 'overview', label: '旅程总览', icon: 'book' },
   { id: 'plan', label: '远征地图', icon: 'plan' },
   { id: 'growth', label: '伙伴营地', icon: 'growth' },
   { id: 'history', label: '冒险日志', icon: 'history' },
@@ -35,15 +37,16 @@ function AppShell() {
         <div className="local-badge"><i /><span>旅程只保存在本地</span></div>
       </div>
     </aside>
-    <main className="main-content">
-      {page === 'home' && <HomePage onNavigate={setPage} />}
+    <main className={`main-content ${page === 'home' ? 'cottage-main-content' : ''}`}>
+      {page === 'home' && <CottagePage onNavigate={setPage} />}
+      {page === 'overview' && <HomePage onNavigate={setPage} />}
       {page === 'plan' && <PlanPage />}
       {page === 'history' && <HistoryPage />}
       {page === 'review' && <ReviewPage />}
       {page === 'growth' && <GrowthPage />}
       {page === 'settings' && <SettingsPage />}
     </main>
-    <FocusController />
+    <FocusController showLauncher={false} />
   </div>
 }
 

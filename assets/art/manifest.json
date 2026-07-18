@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "artDirectionVersion": "0.2.0",
+  "logicalViewport": {
+    "width": 320,
+    "height": 180
+  },
+  "tile": {
+    "width": 32,
+    "height": 32
+  },
+  "palette": {
+    "recommendedMin": 32,
+    "recommendedMax": 40
+  },
+  "specs": [
+    {
+      "id": "cottage-architecture-v1",
+      "path": "specs/cottage-architecture-v1.json",
+      "role": "tileset-contract",
+      "status": "partial-production"
+    }
+  ],
+  "drafts": [
+    {
+      "id": "cottage-architecture-source-v1",
+      "path": "drafts/cottage-architecture-source-v1.png",
+      "status": "source-draft"
+    },
+    {
+      "id": "cottage-architecture-autoclean-v1",
+      "path": "drafts/cottage-architecture-autoclean-v1.png",
+      "status": "grid-normalized-draft"
+    },
+    {
+      "id": "cottage-floor-repaired-draft-v1",
+      "path": "drafts/cottage-floor-repaired-draft-v1.png",
+      "status": "seam-repaired-candidate"
+    },
+    {
+      "id": "cottage-floor-seam-test-v1",
+      "path": "drafts/cottage-floor-seam-test-v1.png",
+      "status": "validation-proof"
+    },
+    {
+      "id": "cottage-wall-plain-draft-v1",
+      "path": "drafts/cottage-wall-plain-draft-v1.png",
+      "status": "seam-repaired-candidate"
+    },
+    {
+      "id": "cottage-wall-seam-test-v1",
+      "path": "drafts/cottage-wall-seam-test-v1.png",
+      "status": "validation-proof"
+    },
+    {
+      "id": "cottage-wall-beam-draft-v1",
+      "path": "drafts/cottage-wall-beam-draft-v1.png",
+      "status": "structure-layer-candidate"
+    },
+    {
+      "id": "cottage-wall-corners-draft-v1",
+      "path": "drafts/cottage-wall-corners-draft-v1.png",
+      "status": "paired-corner-candidate"
+    },
+    {
+      "id": "cottage-doorway-draft-v1",
+      "path": "drafts/cottage-doorway-draft-v1.png",
+      "status": "door-state-candidate"
+    },
+    {
+      "id": "cottage-wall-structure-test-v1",
+      "path": "drafts/cottage-wall-structure-test-v1.png",
+      "status": "validation-proof"
+    },
+    {
+      "id": "player-idle-front-draft-v1",
+      "path": "drafts/player-idle-front-draft-v1.png",
+      "status": "provisional-runtime-candidate"
+    }
+  ],
+  "references": [
+    {
+      "id": "protagonist-style-key-v1",
+      "path": "reference/protagonist-style-key-v1.png",
+      "role": "style-key",
+      "status": "approved-emotional-direction",
+      "notes": [
+        "锁定亲切、善良、年轻旅行者的气质",
+        "锁定棕发、苔绿短披风、米白上衣与暖棕旅行装备",
+        "仅作风格锚点，不是可发布精灵图"
+      ]
+    },
+    {
+      "id": "cottage-style-key-v1",
+      "path": "reference/cottage-style-key-v1.png",
+      "role": "environment-style-key",
+      "status": "approved-art-direction",
+      "notes": [
+        "锁定冬夜小屋的私人、安全、远征归家氛围",
+        "锁定主角、小狗、家具、暖光和冷色窗景属于同一视觉世界",
+        "底部出口构图通过，但图片不是可交互地图",
+        "原图为 1672×941、约 99754 色且非 320×180 整数倍，只可用于反推正式资产"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "cottage-floor-wood-v1",
+      "path": "environments/cottage/cottage_floor_wood_v1.png",
+      "kind": "tileset",
+      "status": "approved-v1",
+      "sourceDraft": "cottage-floor-repaired-draft-v1",
+      "exactWidth": 160,
+      "exactHeight": 32,
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "columns": 5,
+      "rows": 1,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    },
+    {
+      "id": "cottage-wall-plain-v1",
+      "path": "environments/cottage/cottage_wall_plain_v1.png",
+      "kind": "tileset",
+      "status": "approved-v1",
+      "sourceDraft": "cottage-wall-plain-draft-v1",
+      "exactWidth": 160,
+      "exactHeight": 32,
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "columns": 5,
+      "rows": 1,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    },
+    {
+      "id": "cottage-wall-beam-v1",
+      "path": "environments/cottage/cottage_wall_beam_v1.png",
+      "kind": "overlay-tileset",
+      "status": "approved-v1",
+      "sourceDraft": "cottage-wall-beam-draft-v1",
+      "exactWidth": 64,
+      "exactHeight": 32,
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "columns": 2,
+      "rows": 1,
+      "requireAlpha": true,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    },
+    {
+      "id": "cottage-wall-inner-corner-v1",
+      "path": "environments/cottage/cottage_wall_inner_corner_v1.png",
+      "kind": "structure-tileset",
+      "status": "approved-v1",
+      "sourceDraft": "cottage-wall-corners-draft-v1",
+      "exactWidth": 192,
+      "exactHeight": 32,
+      "frame": {
+        "width": 64,
+        "height": 32
+      },
+      "columns": 3,
+      "rows": 1,
+      "requireAlpha": true,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    },
+    {
+      "id": "cottage-doorway-v1",
+      "path": "environments/cottage/cottage_doorway_v1.png",
+      "kind": "structure-tileset",
+      "status": "approved-v1",
+      "sourceDraft": "cottage-doorway-draft-v1",
+      "frameNames": [
+        "open-a",
+        "closed",
+        "open-b",
+        "threshold"
+      ],
+      "exactWidth": 128,
+      "exactHeight": 32,
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "columns": 4,
+      "rows": 1,
+      "requireAlpha": true,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    },
+    {
+      "id": "cottage-room-backdrop-provisional-v1",
+      "path": "environments/cottage/cottage_room_backdrop_provisional_v1.png",
+      "kind": "scene-backdrop",
+      "status": "provisional-runtime-v1",
+      "sourceReference": "cottage-style-key-v1",
+      "exactWidth": 320,
+      "exactHeight": 180,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 40,
+      "notes": [
+        "移除风格锚点中烘焙的主角与小狗，保留家具并由运行时叠加角色",
+        "用于验证可居住感、空间比例、角色融合和家具碰撞",
+        "后续由独立家具、墙体、地板与动态光照层逐步替换"
+      ]
+    },
+    {
+      "id": "hearth-hound-idle-provisional-v1",
+      "path": "characters/companions/hearth_hound_idle_provisional_v1.png",
+      "kind": "companion-sprite",
+      "status": "provisional-v1",
+      "sourceReference": "cottage-style-key-v1",
+      "exactWidth": 32,
+      "exactHeight": 32,
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "columns": 1,
+      "rows": 1,
+      "requireAlpha": true,
+      "transparentBorder": true,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 24
+    },
+    {
+      "id": "player-idle-front-provisional-v1",
+      "path": "characters/player/player_idle_front_provisional_v1.png",
+      "kind": "character-sprite",
+      "status": "provisional-v1",
+      "sourceDraft": "player-idle-front-draft-v1",
+      "exactWidth": 32,
+      "exactHeight": 48,
+      "frame": {
+        "width": 32,
+        "height": 48
+      },
+      "columns": 1,
+      "rows": 1,
+      "requireAlpha": true,
+      "allowSemiTransparent": false,
+      "maxOpaqueColors": 32
+    }
+  ]
+}

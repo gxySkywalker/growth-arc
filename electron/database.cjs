@@ -19,19 +19,28 @@ const {
   companionStage,
   evolutionReady,
 } = require('./game.cjs')
+const {
+  WORLD_CONTENT_NAMESPACE,
+  WORLD_CONTENT_VERSION,
+  WORLD_REGIONS,
+  WORLD_NODES,
+  WORLD_EDGES,
+} = require('./world-content.cjs')
 
 class StudyDatabase {
   constructor(dataDir) {
     this.dataDir = dataDir
     this.filePath = path.join(dataDir, 'growth-arc.sqlite')
     this.db = null
+    this.hadExistingDatabase = false
   }
 
   async init() {
     fs.mkdirSync(this.dataDir, { recursive: true })
     const wasmBinary = fs.readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
     const SQL = await initSqlJs({ wasmBinary })
-    const existing = fs.existsSync(this.filePath) ? fs.readFileSync(this.filePath) : undefined
+    this.hadExistingDatabase = fs.existsSync(this.filePath)
+    const existing = this.hadExistingDatabase ? fs.readFileSync(this.filePath) : undefined
     this.db = existing ? new SQL.Database(existing) : new SQL.Database()
     this.db.run('PRAGMA foreign_keys = ON;')
     this.migrate()
@@ -166,11 +175,90 @@ class StudyDatabase {
         next_step TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS content_versions (
+        namespace TEXT PRIMARY KEY,
+        version TEXT NOT NULL,
+        installed_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS player_profiles (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        body_type TEXT NOT NULL DEFAULT 'traveler',
+        skin_tone TEXT NOT NULL DEFAULT 'warm_2',
+        hair_style TEXT NOT NULL DEFAULT 'short_windswept',
+        hair_color TEXT NOT NULL DEFAULT 'chestnut',
+        outfit_id TEXT NOT NULL DEFAULT 'traveler_clothes',
+        outfit_tint TEXT NOT NULL DEFAULT 'forest',
+        cape_enabled INTEGER NOT NULL DEFAULT 1,
+        intro_status TEXT NOT NULL DEFAULT 'unseen',
+        intro_seen_at INTEGER,
+        customized_at INTEGER,
+        created_from_legacy INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS world_regions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        layer INTEGER NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL DEFAULT 'hidden',
+        discovered_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS world_nodes (
+        id TEXT PRIMARY KEY,
+        region_id TEXT NOT NULL REFERENCES world_regions(id),
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        map_x REAL NOT NULL DEFAULT 0,
+        map_y REAL NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL DEFAULT 'hidden',
+        discovered_at INTEGER,
+        discovery_session_id TEXT REFERENCES focus_sessions(id) ON DELETE SET NULL
+      );
+      CREATE TABLE IF NOT EXISTS world_edges (
+        id TEXT PRIMARY KEY,
+        from_node_id TEXT NOT NULL REFERENCES world_nodes(id),
+        to_node_id TEXT NOT NULL REFERENCES world_nodes(id),
+        distance REAL NOT NULL DEFAULT 1,
+        state TEXT NOT NULL DEFAULT 'hidden',
+        discovered_at INTEGER,
+        discovery_session_id TEXT REFERENCES focus_sessions(id) ON DELETE SET NULL
+      );
+      CREATE TABLE IF NOT EXISTS world_events (
+        id TEXT PRIMARY KEY,
+        event_key TEXT NOT NULL UNIQUE,
+        definition_id TEXT NOT NULL,
+        definition_version INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'resolved',
+        session_id TEXT REFERENCES focus_sessions(id) ON DELETE SET NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        occurred_at INTEGER NOT NULL,
+        resolved_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS discoveries (
+        id TEXT PRIMARY KEY,
+        discovery_key TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        session_id TEXT REFERENCES focus_sessions(id) ON DELETE SET NULL,
+        event_id TEXT REFERENCES world_events(id) ON DELETE SET NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_tasks_area ON tasks(area_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_started ON focus_sessions(started_at);
       CREATE INDEX IF NOT EXISTS idx_intervals_session ON focus_intervals(session_id);
       CREATE INDEX IF NOT EXISTS idx_companions_active ON companions(is_active);
       CREATE INDEX IF NOT EXISTS idx_relics_created ON knowledge_relics(created_at);
+      CREATE INDEX IF NOT EXISTS idx_world_nodes_region ON world_nodes(region_id, sort_order);
+      CREATE INDEX IF NOT EXISTS idx_world_edges_nodes ON world_edges(from_node_id, to_node_id);
+      CREATE INDEX IF NOT EXISTS idx_world_events_occurred ON world_events(occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_discoveries_created ON discoveries(created_at);
     `)
     const sessionColumns = new Set(this.all('PRAGMA table_info(focus_sessions)').map((column) => column.name))
     if (!sessionColumns.has('companion_id')) this.db.run('ALTER TABLE focus_sessions ADD COLUMN companion_id TEXT')
@@ -202,7 +290,51 @@ class StudyDatabase {
     if (!this.one('SELECT id FROM companions LIMIT 1')) {
       this.run("INSERT INTO companions (id, species_id, nickname, is_active, met_at) VALUES (?, 'hearth_hound', '栗子', 1, ?)", [crypto.randomUUID(), now], false)
     }
+    this.seedWorldFoundation(now)
     this.save()
+  }
+
+  seedWorldFoundation(now = Date.now()) {
+    this.run('INSERT INTO content_versions (namespace, version, installed_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(namespace) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at', [
+      WORLD_CONTENT_NAMESPACE, WORLD_CONTENT_VERSION, now, now,
+    ], false)
+
+    const settings = this.getSettings()
+    if (!this.one('SELECT id FROM player_profiles WHERE id = \'primary\'')) {
+      const legacy = this.hadExistingDatabase ? 1 : 0
+      this.run('INSERT INTO player_profiles (id, display_name, intro_status, created_from_legacy, created_at, updated_at) VALUES (\'primary\', ?, ?, ?, ?, ?)', [
+        String(settings.user_name || 'Traveler').trim() || 'Traveler',
+        legacy ? 'available' : 'unseen', legacy, now, now,
+      ], false)
+    }
+
+    for (const region of WORLD_REGIONS) this.seedWorldRegion(region, now)
+    for (const node of WORLD_NODES) this.seedWorldNode(node, now)
+    for (const edge of WORLD_EDGES) this.seedWorldEdge(edge, now)
+  }
+
+  seedWorldRegion(region, now) {
+    const discoveredAt = region.initialState === 'discovered' ? now : null
+    this.run('INSERT INTO world_regions (id, name, layer, description, sort_order, state, discovered_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, layer = excluded.layer, description = excluded.description, sort_order = excluded.sort_order', [
+      region.id, region.name, region.layer, region.description, region.sortOrder,
+      region.initialState, discoveredAt,
+    ], false)
+  }
+
+  seedWorldNode(node, now) {
+    const discoveredAt = node.initialState === 'discovered' ? now : null
+    this.run('INSERT INTO world_nodes (id, region_id, kind, name, description, map_x, map_y, sort_order, state, discovered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET region_id = excluded.region_id, kind = excluded.kind, name = excluded.name, description = excluded.description, map_x = excluded.map_x, map_y = excluded.map_y, sort_order = excluded.sort_order', [
+      node.id, node.regionId, node.kind, node.name, node.description,
+      node.mapX, node.mapY, node.sortOrder, node.initialState, discoveredAt,
+    ], false)
+  }
+
+  seedWorldEdge(edge, now) {
+    const discoveredAt = edge.initialState === 'discovered' ? now : null
+    this.run('INSERT INTO world_edges (id, from_node_id, to_node_id, distance, state, discovered_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET from_node_id = excluded.from_node_id, to_node_id = excluded.to_node_id, distance = excluded.distance', [
+      edge.id, edge.fromNodeId, edge.toNodeId, edge.distance,
+      edge.initialState, discoveredAt,
+    ], false)
   }
 
   save() {
@@ -257,6 +389,146 @@ class StudyDatabase {
       }
     })
     return this.getSettings()
+  }
+
+  getPlayerProfile() {
+    const row = this.one('SELECT * FROM player_profiles WHERE id = ?', ['primary'])
+    if (!row) return null
+    return {
+      ...row,
+      cape_enabled: Boolean(row.cape_enabled),
+      created_from_legacy: Boolean(row.created_from_legacy),
+    }
+  }
+
+  updatePlayerProfile(patch = {}) {
+    const current = this.one('SELECT * FROM player_profiles WHERE id = ?', ['primary'])
+    if (!current) throw new Error('Player profile is missing')
+    const now = Date.now()
+    const cleanName = String(patch.displayName ?? current.display_name).trim().slice(0, 40)
+    if (!cleanName) throw new Error('Player name is required')
+    const cleanId = (value, fallback) => {
+      const clean = String(value ?? fallback).trim().slice(0, 64)
+      return /^[a-z0-9_.-]+$/i.test(clean) ? clean : fallback
+    }
+    const introStatus = String(patch.introStatus ?? current.intro_status)
+    if (!['unseen', 'available', 'seen', 'skipped'].includes(introStatus)) throw new Error('Invalid intro status')
+    const appearanceChanged = ['displayName', 'bodyType', 'skinTone', 'hairStyle', 'hairColor', 'outfitId', 'outfitTint', 'capeEnabled']
+      .some((key) => patch[key] !== undefined)
+    const values = {
+      displayName: cleanName,
+      bodyType: cleanId(patch.bodyType, current.body_type),
+      skinTone: cleanId(patch.skinTone, current.skin_tone),
+      hairStyle: cleanId(patch.hairStyle, current.hair_style),
+      hairColor: cleanId(patch.hairColor, current.hair_color),
+      outfitId: cleanId(patch.outfitId, current.outfit_id),
+      outfitTint: cleanId(patch.outfitTint, current.outfit_tint),
+      capeEnabled: patch.capeEnabled === undefined ? Number(current.cape_enabled) : (patch.capeEnabled ? 1 : 0),
+      introStatus,
+      introSeenAt: introStatus === 'seen' ? (current.intro_seen_at || now) : current.intro_seen_at,
+      customizedAt: appearanceChanged ? now : current.customized_at,
+    }
+    this.transaction(() => {
+      this.run('UPDATE player_profiles SET display_name = ?, body_type = ?, skin_tone = ?, hair_style = ?, hair_color = ?, outfit_id = ?, outfit_tint = ?, cape_enabled = ?, intro_status = ?, intro_seen_at = ?, customized_at = ?, updated_at = ? WHERE id = ?', [
+        values.displayName, values.bodyType, values.skinTone, values.hairStyle,
+        values.hairColor, values.outfitId, values.outfitTint, values.capeEnabled,
+        values.introStatus, values.introSeenAt, values.customizedAt, now, 'primary',
+      ], false)
+      this.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user_name', values.displayName], false)
+    })
+    return this.getPlayerProfile()
+  }
+
+  parseStoredJson(value) {
+    try {
+      return JSON.parse(value || '{}')
+    } catch {
+      return {}
+    }
+  }
+
+  getWorldFoundation() {
+    const content = this.one('SELECT * FROM content_versions WHERE namespace = ?', [WORLD_CONTENT_NAMESPACE])
+    const discoveries = this.all('SELECT * FROM discoveries ORDER BY created_at').map((row) => ({
+      ...row,
+      metadata: this.parseStoredJson(row.metadata_json),
+    }))
+    const recentEvents = this.all('SELECT * FROM world_events ORDER BY occurred_at DESC LIMIT 20').map((row) => ({
+      ...row,
+      payload: this.parseStoredJson(row.payload_json),
+    }))
+    return {
+      content: content || { namespace: WORLD_CONTENT_NAMESPACE, version: WORLD_CONTENT_VERSION },
+      player: this.getPlayerProfile(),
+      map: {
+        regions: this.all('SELECT * FROM world_regions ORDER BY sort_order, id'),
+        nodes: this.all('SELECT * FROM world_nodes ORDER BY sort_order, id'),
+        edges: this.all('SELECT * FROM world_edges ORDER BY id'),
+        discoveries,
+      },
+      recentEvents,
+    }
+  }
+
+  recordWorldEvent(data, persist = true) {
+    const eventKey = String(data?.eventKey || '').trim()
+    if (!eventKey) throw new Error('Event key is required')
+    const existing = this.one('SELECT * FROM world_events WHERE event_key = ?', [eventKey])
+    if (existing) return { ...existing, payload: this.parseStoredJson(existing.payload_json) }
+    const id = crypto.randomUUID()
+    const occurredAt = Number(data.occurredAt) || Date.now()
+    const write = () => this.run('INSERT INTO world_events (id, event_key, definition_id, definition_version, status, session_id, payload_json, occurred_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      id,
+      eventKey,
+      String(data.definitionId || eventKey),
+      Math.max(1, Number(data.definitionVersion) || 1),
+      String(data.status || 'resolved'),
+      data.sessionId || null,
+      JSON.stringify(data.payload || {}),
+      occurredAt,
+      data.resolvedAt || (data.status === 'pending' ? null : occurredAt),
+    ], false)
+    if (persist) this.transaction(write)
+    else write()
+    const row = this.one('SELECT * FROM world_events WHERE id = ?', [id])
+    return { ...row, payload: this.parseStoredJson(row.payload_json) }
+  }
+
+  recordDiscovery(data, persist = true) {
+    const discoveryKey = String(data?.discoveryKey || '').trim()
+    const kind = String(data?.kind || '')
+    const targetId = String(data?.targetId || '').trim()
+    if (!discoveryKey || !targetId) throw new Error('Discovery key and target are required')
+    const existing = this.one('SELECT * FROM discoveries WHERE discovery_key = ?', [discoveryKey])
+    if (existing) return { ...existing, metadata: this.parseStoredJson(existing.metadata_json) }
+    const targetTables = { region: 'world_regions', node: 'world_nodes', edge: 'world_edges' }
+    const targetTable = targetTables[kind]
+    if (!targetTable) throw new Error('Invalid discovery kind')
+    if (!this.one(`SELECT id FROM ${targetTable} WHERE id = ?`, [targetId])) throw new Error('Discovery target does not exist')
+    const id = crypto.randomUUID()
+    const createdAt = Number(data.createdAt) || Date.now()
+    const write = () => {
+      this.run('INSERT INTO discoveries (id, discovery_key, kind, target_id, session_id, event_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
+        id, discoveryKey, kind, targetId, data.sessionId || null, data.eventId || null,
+        JSON.stringify(data.metadata || {}), createdAt,
+      ], false)
+      if (kind === 'region') {
+        this.run('UPDATE world_regions SET state = ?, discovered_at = COALESCE(discovered_at, ?) WHERE id = ?', ['discovered', createdAt, targetId], false)
+      } else {
+        this.run(`UPDATE ${targetTable} SET state = ?, discovered_at = COALESCE(discovered_at, ?), discovery_session_id = COALESCE(discovery_session_id, ?) WHERE id = ?`, [
+          'discovered', createdAt, data.sessionId || null, targetId,
+        ], false)
+        if (kind === 'node') {
+          this.run('UPDATE world_regions SET state = ?, discovered_at = COALESCE(discovered_at, ?) WHERE id = (SELECT region_id FROM world_nodes WHERE id = ?)', [
+            'discovered', createdAt, targetId,
+          ], false)
+        }
+      }
+    }
+    if (persist) this.transaction(write)
+    else write()
+    const row = this.one('SELECT * FROM discoveries WHERE id = ?', [id])
+    return { ...row, metadata: this.parseStoredJson(row.metadata_json) }
   }
 
   getStructure() {
@@ -649,6 +921,7 @@ class StudyDatabase {
     const latest = this.one('SELECT session_id FROM expeditions ORDER BY created_at DESC LIMIT 1')
     return {
       name: settings.world_name || '炉火营地',
+      foundation: this.getWorldFoundation(),
       companions: this.getCompanionCollection(),
       inventory: this.getInventory(),
       relics: this.getKnowledgeRelics(6),

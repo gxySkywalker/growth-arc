@@ -44,7 +44,7 @@ export function ReviewPage() {
 
   const stats = tab === 'daily' ? daily?.stats : weekly?.stats
   return <div className="page review-page">
-    <header className="page-heading"><div><span className="eyebrow">REFLECTION</span><h1>让经历变成反馈。</h1><p>复盘不是审判过去，而是给下一次开始留一条更清晰的路。</p></div><input className="date-control" type="date" value={date} max={todayKey()} onChange={(event) => setDate(event.target.value)} /></header>
+    <header className="page-heading"><div><span className="eyebrow">天使的书桌 · 每日来信</span><h1>让今天安静地留下来。</h1><p>复盘不是审判，也不要求你安排未来；它只是替今天保存真实的形状。</p></div><input className="date-control" type="date" value={date} max={todayKey()} onChange={(event) => setDate(event.target.value)} /></header>
     <div className="segmented"><button className={tab === 'daily' ? 'active' : ''} onClick={() => setTab('daily')}>日复盘</button><button className={tab === 'weekly' ? 'active' : ''} onClick={() => setTab('weekly')}>周成长报告</button></div>
     {stats && <section className="review-stats"><div><Icon name="clock" /><span>专注投入<strong>{formatDuration(stats.focusSeconds)}</strong></span></div><div><Icon name="check" /><span>完成事项<strong>{stats.completedTasks}</strong></span></div><div><Icon name="wave" /><span>{tab === 'daily' ? '专注次数' : '活跃天数'}<strong>{tab === 'daily' ? stats.sessionCount : stats.activeDays}</strong></span></div><div><Icon name="growth" /><span>平均专注<strong>{formatDuration(stats.averageSessionSeconds)}</strong></span></div></section>}
 
@@ -52,7 +52,7 @@ export function ReviewPage() {
       <section className="panel review-form"><div className="section-heading"><div><span className="eyebrow">ONE MINUTE</span><h2>今天留下什么？</h2></div></div>
         <div className="form-stack"><label>今天最重要的成果<textarea rows={3} value={win} onChange={(event) => setWin(event.target.value)} placeholder="不必宏大，写下真正向前的一点" /></label><label>最大的阻碍（可选）<textarea rows={2} value={blocker} onChange={(event) => setBlocker(event.target.value)} placeholder="记录事实，不责备自己" /></label>
           <fieldset className="energy-picker"><legend>学习时的整体状态</legend>{[1,2,3,4,5].map((value) => <button key={value} className={energy === value ? 'active' : ''} onClick={() => setEnergy(value)}><span>{['低','偏低','平稳','不错','很好'][value - 1]}</span><i>{value}</i></button>)}</fieldset>
-          <label>明天打开系统后的第一件事<input value={tomorrowTask} onChange={(event) => setTomorrowTask(event.target.value)} placeholder="让明天的开始无需重新思考" /></label>
+          <label>给未来某天的自己留一句话（可选）<input value={tomorrowTask} onChange={(event) => setTomorrowTask(event.target.value)} placeholder="没有想说的也可以留空" /></label>
         </div><footer className="form-footer"><button className="button button-primary" disabled={busy} onClick={saveDaily}><Icon name="check" size={17} />保存今日复盘</button></footer>
       </section>
       <aside className="review-side">{daily.review?.ai ? <AiReportCard report={daily.review.ai} model={daily.review.ai_model} /> : <section className="panel ai-empty"><div className="ai-mark"><Icon name="brain" /></div><h2>需要另一双眼睛吗？</h2><p>AI 会读取当天统计、事项名称和你的复盘文字，生成一份温和但诚实的观察。</p><button className="button button-secondary" disabled={busy} onClick={generateAi}>{busy ? '正在思考…' : '生成 AI 日评'}</button><small>数据会发送到你配置的 OpenAI API。</small></section>}</aside>

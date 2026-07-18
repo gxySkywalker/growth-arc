@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "id": "cottage-architecture-v1",
+  "status": "partial-production",
+  "productionSlices": {
+    "floorWood": {
+      "assetId": "cottage-floor-wood-v1",
+      "tileIds": [
+        "floor_wood_01",
+        "floor_wood_02",
+        "floor_wood_03",
+        "floor_wood_04",
+        "floor_wood_05"
+      ]
+    },
+    "wallPlain": {
+      "assetId": "cottage-wall-plain-v1",
+      "tileIds": [
+        "wall_plain_01",
+        "wall_plain_02",
+        "wall_plain_03",
+        "wall_plain_04",
+        "wall_plain_05"
+      ]
+    },
+    "wallBeam": {
+      "assetId": "cottage-wall-beam-v1",
+      "tileIds": [
+        "wall_beam_01",
+        "wall_beam_02"
+      ]
+    },
+    "wallInnerCorner": {
+      "assetId": "cottage-wall-inner-corner-v1",
+      "tileIds": [
+        "wall_inner_corner_01",
+        "wall_inner_corner_02",
+        "wall_inner_corner_03"
+      ]
+    },
+    "doorway": {
+      "assetId": "cottage-doorway-v1",
+      "tileIds": [
+        "doorway_open_a",
+        "doorway_closed",
+        "doorway_open_b",
+        "doorway_threshold"
+      ]
+    }
+  },
+  "atlas": {
+    "logicalWidth": 256,
+    "logicalHeight": 256,
+    "columns": 8,
+    "rows": 8,
+    "cellWidth": 32,
+    "cellHeight": 32,
+    "runtimeBackground": "transparent",
+    "draftChromaKey": "#ff00ff"
+  },
+  "grid": [
+    [
+      "floor_wood_01",
+      "floor_wood_02",
+      "floor_wood_03",
+      "floor_wood_04",
+      "floor_wood_05",
+      "floor_wood_06",
+      "floor_wood_07",
+      "floor_wood_08"
+    ],
+    [
+      "floor_edge_n",
+      "floor_edge_e",
+      "floor_edge_s",
+      "floor_edge_w",
+      "floor_inner_nw",
+      "floor_inner_ne",
+      "floor_inner_se",
+      "floor_inner_sw"
+    ],
+    [
+      "floor_outer_nw",
+      "floor_outer_ne",
+      "floor_outer_se",
+      "floor_outer_sw",
+      "floor_snow_n",
+      "floor_snow_e",
+      "floor_snow_s",
+      "floor_snow_w"
+    ],
+    [
+      "wall_north_upper_plain",
+      "wall_north_upper_timber",
+      "wall_north_lower_plain",
+      "wall_north_lower_timber",
+      "wall_east_upper",
+      "wall_east_lower",
+      "wall_west_upper",
+      "wall_west_lower"
+    ],
+    [
+      "wall_inner_nw",
+      "wall_inner_ne",
+      "wall_inner_se",
+      "wall_inner_sw",
+      "wall_outer_nw",
+      "wall_outer_ne",
+      "wall_outer_se",
+      "wall_outer_sw"
+    ],
+    [
+      "wall_cap_horizontal",
+      "wall_cap_vertical",
+      "foundation_horizontal",
+      "foundation_vertical",
+      "doorway_frame_left",
+      "doorway_frame_right",
+      "doorway_lintel",
+      "doorway_threshold"
+    ],
+    [
+      "snow_dark_01",
+      "snow_dark_02",
+      "snow_dark_03",
+      "snow_dark_04",
+      "snow_edge_n",
+      "snow_edge_e",
+      "snow_edge_s",
+      "snow_edge_w"
+    ],
+    [
+      "reserved_01",
+      "reserved_02",
+      "reserved_03",
+      "reserved_04",
+      "reserved_05",
+      "reserved_06",
+      "reserved_07",
+      "reserved_08"
+    ]
+  ],
+  "rules": {
+    "maxOpaqueColors": 32,
+    "allowSemiTransparent": false,
+    "requireIntegerPixelGrid": true,
+    "bakedLighting": false,
+    "defaultLightDirection": "upper-left-neutral",
+    "reservedPrefix": "reserved_"
+  }
+}
