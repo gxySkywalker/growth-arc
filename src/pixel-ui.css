@@ -1,0 +1,135 @@
+@font-face {
+  font-family: 'Fusion Pixel SC';
+  src: url('../assets/fonts/fusion-pixel-12px-proportional-zh-hans.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --font-pixel: 'Fusion Pixel SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  font-family: var(--font-pixel);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-pixel);
+}
+
+h1,
+h2,
+h3,
+.brand strong,
+.collection-count strong,
+.evolution-choice button strong,
+.history-overview strong,
+.review-stats strong,
+.comparison-grid strong,
+.loading-fire + strong,
+.energy-picker button i,
+.focus-copy time,
+.focus-expedition.is-paused::after {
+  font-family: var(--font-pixel) !important;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 400;
+  letter-spacing: .045em;
+}
+
+p,
+textarea {
+  line-height: 1.7;
+}
+
+.button,
+.panel,
+.parchment-card,
+.weather-note,
+.home-stats article,
+.modal,
+input,
+textarea,
+select,
+.sidebar nav button,
+.sidebar-bottom button {
+  border-radius: 0;
+}
+
+.button {
+  letter-spacing: .035em;
+  box-shadow: inset 0 0 0 1px rgba(255, 242, 209, .12), 0 3px 0 rgba(76, 42, 25, .68);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 0 0 1px rgba(255, 242, 209, .12), 0 1px 0 rgba(76, 42, 25, .68);
+}
+
+.icon-button {
+  color: #76523b;
+  background: #e6cfa6;
+  border: 1px solid #b58d5e;
+  border-radius: 0;
+}
+
+.icon-button:hover {
+  color: #fff1cf;
+  background: #92502f;
+}
+
+.segmented {
+  width: fit-content;
+  margin: 0 0 16px;
+  padding: 3px;
+  display: flex;
+  gap: 3px;
+  background: #d5bc91;
+  border: 2px solid #7a5033;
+  box-shadow: inset 0 0 0 1px #ead7b4;
+}
+
+.segmented button {
+  min-height: 34px;
+  padding: 0 15px;
+  color: #6e513d;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.segmented button:hover {
+  background: rgba(255, 246, 222, .4);
+}
+
+.segmented button.active {
+  color: #fff0cc;
+  background: #70442c;
+  box-shadow: inset 0 0 0 1px #9f6a43;
+}
+
+.date-control {
+  max-width: 270px;
+  color: #513724;
+  background: #f6e6c5;
+  border: 2px solid #a8784d;
+}
+
+.settlement-note {
+  margin: -4px 0 0;
+  padding: 11px 13px;
+  color: #816b57;
+  background: #ead9b9;
+  border-left: 4px solid #8b6848;
+  font-size: 11px;
+}
+
+::selection {
+  color: #fff0cd;
+  background: #8e5534;
+}

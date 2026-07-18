@@ -190,6 +190,8 @@ function handle(channel, callback) {
 
 function registerHandlers() {
   handle('dashboard:get', () => database.getDashboard())
+  handle('world:get', () => database.getWorldFoundation())
+  handle('player:update', (data) => database.updatePlayerProfile(data))
   handle('structure:get', () => database.getStructure())
   handle('area:create', (data) => database.createArea(data))
   handle('area:archive', (id) => database.archiveArea(id))

@@ -1,0 +1,113 @@
+.hearth-hero.hearth-hero-v2 {
+  min-height: 0;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+  gap: 18px;
+  align-items: start;
+  background: #2b1c14;
+}
+
+.hearth-hero.hearth-hero-v2::after { display: none; }
+.hearth-hero-v2 .journey-callout { position: relative; inset: auto; width: auto; }
+.cottage-stage { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.cottage-scene-shell { min-width: 0; }
+
+.cottage-scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  cursor: default;
+  background: #1f2936;
+  outline: none;
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 3px #6b4228, 0 0 0 6px #1d120c, 0 8px 22px rgba(10, 6, 4, .42);
+}
+
+.cottage-scene:focus { box-shadow: 0 0 0 3px #c28a49, 0 0 0 6px #1d120c, 0 8px 22px rgba(10, 6, 4, .42); }
+.cottage-room-backdrop { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: fill; image-rendering: pixelated; user-select: none; }
+.cottage-firelight { position: absolute; z-index: 2; left: 8%; top: 4%; width: 28%; height: 44%; pointer-events: none; background: radial-gradient(circle, rgba(255, 173, 65, .16), rgba(255, 115, 25, .04) 52%, transparent 72%); animation: cottage-fire-flicker 2.2s steps(4, end) infinite; }
+.cottage-vignette { position: absolute; z-index: 3; inset: 0; pointer-events: none; box-shadow: inset 0 0 24px rgba(16, 8, 4, .48); }
+@keyframes cottage-fire-flicker { 0%, 100% { opacity: .78; } 35% { opacity: 1; transform: scale(1.02); } 70% { opacity: .66; } }
+
+.cottage-scene-companion { position: absolute; left: 43.75%; top: 43.333%; width: 10%; height: 17.777%; color: #f5ddb7; pointer-events: none; image-rendering: pixelated; }
+.cottage-scene-companion img, .cottage-scene-companion svg { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
+.cottage-scene-companion.facing-right img, .cottage-scene-companion.facing-right svg { transform: scaleX(-1); }
+.cottage-scene-companion.is-attentive { animation: companion-answer .48s steps(2, end) 2; }
+@keyframes companion-answer { 50% { margin-top: -1.4%; } }
+
+.cottage-player {
+  position: absolute;
+  z-index: 7;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 0 rgba(25, 14, 9, .42));
+  transition: left 55ms linear, top 55ms linear;
+}
+
+.cottage-player.facing-west { transform: scaleX(-1); }
+.cottage-player.facing-east { transform: scaleX(1); }
+.cottage-interaction-prompt {
+  position: absolute;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px 4px 4px;
+  color: #f3dfbd;
+  background: rgba(38, 23, 15, .94);
+  border: 1px solid #b27b48;
+  box-shadow: 2px 3px 0 rgba(19, 10, 6, .58);
+  font-size: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  animation: cottage-prompt-arrive .32s steps(2, end), cottage-prompt-idle 1.1s .32s steps(2, end) infinite;
+}
+.cottage-interaction-prompt::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 6px;
+  height: 6px;
+  background: #26170f;
+  border-right: 1px solid #b27b48;
+  border-bottom: 1px solid #b27b48;
+  transform: translateX(-50%) rotate(45deg);
+}
+.cottage-interaction-prompt kbd {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: #392217;
+  background: #efd397;
+  border: 1px solid #fff0c4;
+  box-shadow: 0 2px 0 #8b5a32;
+  font: 700 9px/1 monospace;
+}
+@keyframes cottage-prompt-arrive { from { opacity: 0; transform: translate(-50%, -82%); } }
+@keyframes cottage-prompt-idle { 50% { margin-top: -2px; } }
+.cottage-scene-status { min-height: 28px; padding: 7px 10px; display: flex; align-items: center; gap: 8px; color: #dcc8a6; background: #25170f; border: 1px solid #68442d; font-size: 11px; }
+.cottage-scene-status span { width: 7px; height: 7px; background: #8fa66a; box-shadow: 0 0 0 2px #3a4b2e; }
+.cottage-scene-shell.is-immersive .cottage-scene-status { position: absolute; z-index: 20; left: 13px; bottom: 13px; max-width: 56%; min-height: 0; padding: 6px 9px; background: rgba(37, 23, 15, .91); font-size: 9px; }
+.cottage-world-stage.dialogue-open .cottage-scene-status { opacity: 0; }
+.cottage-world-stage.dialogue-open .cottage-interaction-prompt { opacity: 0; }
+
+.cottage-companion-card { min-height: 64px; padding: 7px 11px; display: flex; align-items: center; gap: 10px; overflow: hidden; color: #ead8ba; background: #352319; border: 1px solid #6b4831; cursor: pointer; text-align: left; }
+.cottage-companion-card:hover { border-color: #a7764e; background: #3d291d; }
+.cottage-companion-card > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cottage-companion-card strong { font-size: 12px; }
+.cottage-companion-card strong small { margin-left: 6px; opacity: .55; }
+.cottage-companion-card em { overflow: hidden; color: #c8b294; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-style: normal; }
+.cottage-companion-avatar { position: relative; flex: 0 0 48px; width: 48px; height: 48px; overflow: hidden; background: #2a1a12; border: 2px solid #805637; box-shadow: inset 0 0 0 2px #49301f; }
+.cottage-companion-card .cottage-companion-avatar .pixel-companion { position: absolute; left: -34px; top: -23px; width: 116px; height: 100px; margin: 0; transform: scale(.43); transform-origin: center; }
+
+@media (max-width: 1180px) {
+  .hearth-hero.hearth-hero-v2 { min-height: 0; grid-template-columns: 1fr; }
+  .hearth-hero-v2 .journey-callout { width: 100%; }
+}

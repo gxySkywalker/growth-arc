@@ -7,10 +7,21 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "prebuild": "npm run art:validate",
     "build": "tsc -p tsconfig.app.json && vite build",
     "start": "npm run build && electron .",
-    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts",
+    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts src/lib/cottage-scene.test.ts",
     "test:watch": "vitest",
+    "art:validate": "node scripts/validate-art-assets.mjs",
+    "art:prepare:cottage": "node scripts/prepare-tileset-draft.mjs",
+    "art:repair:cottage-floor": "node scripts/repair-cottage-floor-draft.mjs",
+    "art:test:cottage-seams": "node scripts/build-tileset-seam-test.mjs",
+    "art:repair:cottage-walls": "node scripts/repair-cottage-wall-draft.mjs",
+    "art:test:cottage-walls": "node scripts/build-cottage-wall-test.mjs",
+    "art:prepare:cottage-structure": "node scripts/prepare-cottage-structure-drafts.mjs",
+    "art:test:cottage-structure": "node scripts/build-cottage-structure-test.mjs",
+    "art:prepare:player-idle": "node scripts/prepare-player-idle-draft.mjs",
+    "art:build:cottage-backdrop": "node scripts/build-cottage-runtime-backdrop.mjs",
     "dist": "npm run build && electron-builder --win nsis"
   },
   "build": {
