@@ -2,12 +2,15 @@ export function formatDuration(seconds: number, compact = false) {
   const safe = Math.max(0, Math.floor(Number(seconds) || 0))
   const hours = Math.floor(safe / 3600)
   const minutes = Math.floor((safe % 3600) / 60)
+  const secs = safe % 60
   if (compact) {
     if (hours) return `${hours}h ${minutes}m`
-    return `${minutes}m`
+    if (minutes) return `${minutes}m`
+    return `${secs}s`
   }
   if (hours) return `${hours} 小时 ${minutes} 分钟`
-  return `${minutes} 分钟`
+  if (minutes) return `${minutes} 分钟`
+  return `${secs} 秒`
 }
 
 export function formatClock(seconds: number) {
