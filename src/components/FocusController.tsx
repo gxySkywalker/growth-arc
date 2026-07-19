@@ -135,6 +135,12 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     .filter(t => !contribSearch || t.title.toLowerCase().includes(contribSearch.toLowerCase()))
     .sort((a, b) => a.sort_order - b.sort_order)
 
+  const normalizeText = (v?: string | null) => (v ?? '').trim().replace(/\s+/g, ' ')
+  const sessionTitle = normalizeText(stopResult?.session?.content) || '未命名远征'
+  const outcomeText = normalizeText(stopResult?.session?.outcome)
+  const relicText = normalizeText(expedition?.knowledgeRelic?.content)
+  const showRelicContent = !!relicText && relicText !== outcomeText
+
   return <>
     {activeSession ? <section className={`focus-expedition ${activeSession.status === 'paused' ? 'is-paused' : ''}`}>
       <div className="focus-sky"><i /><i /><i /></div>
@@ -256,13 +262,8 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     </div></div>}
 
     {/* 远征归来结果 */}
-    {expedition && (() => {
-      const norm = (v?: string | null) => (v ?? '').trim().replace(/\s+/g, ' ')
-      const sessionTitle = norm(stopResult?.session?.content) || '未命名远征'
-      const outcome = norm(stopResult?.session?.outcome)
-      const relicContent = norm(expedition?.knowledgeRelic?.content)
-      const showRelicContent = relicContent && relicContent !== outcome
-      return <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="modal-wide return-result-modal">
+    {expedition && (
+      <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="return-result-modal">
         <div className="return-result-scroll">
           <div className="return-scene">
             <span className="return-tier">{expedition.tier.name}</span><h2>{expedition.location}</h2><p>{expedition.event}</p>
@@ -293,7 +294,7 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
         </div>
         <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>把宝藏放回小屋</button></footer>
       </Modal>
-    })}
+    )}
   </>
 }
 
