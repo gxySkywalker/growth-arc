@@ -45,7 +45,7 @@
 
 ## 快速开始
 
-**安装包**：下载 `dist/成长轨迹 Setup 0.2.0.exe` 安装。
+**安装包**：从 [GitHub Releases](https://github.com/gxySkywalker/growth-arc/releases) 下载最新版本安装。
 
 **开发模式**：
 
