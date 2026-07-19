@@ -56,7 +56,7 @@ export interface FocusSession {
   area_color?: string
   xp_awarded?: number
   expedition?: ExpeditionResult | null
-  contributedTasks?: Array<{ task_id: string; selection_order: number; xp_awarded: number; title: string; area_name: string; area_color: string }>
+  contributedTasks?: Array<{ task_id: string; selection_order: number; xp_awarded: number; reason: string; title: string; area_name: string; area_color: string }>
 }
 
 export interface CompanionSpecies {
@@ -359,8 +359,8 @@ export interface GrowthArcApi {
     resume: (id: string) => Promise<FocusSession | null>
     stop: (id: string, data: { outcome: string; blocker: string; nextStep: string; taskCompleted: boolean; contributedTaskIds?: string[] }) => Promise<{
       session: FocusSession; xpAwarded: number; unlocked: Achievement[]; expedition: ExpeditionResult
-      primaryTask: { taskId: string | null; completed: boolean; xpAwarded: number; alreadyAwarded: boolean }
-      contributedTasks: Array<{ taskId: string; title: string; completed: boolean; xpAwarded: number; alreadyAwarded: boolean }>
+      primaryTask: { taskId: string | null; completed: boolean; xpAwarded: number; alreadyAwarded: boolean; reason?: string }
+      contributedTasks: Array<{ taskId: string; title: string; completed: boolean; xpAwarded: number; alreadyAwarded: boolean; reason: string }>
     }>
     cancel: (id: string) => Promise<null>
   }

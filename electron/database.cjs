@@ -267,6 +267,7 @@ class StudyDatabase {
     `)
     const linkCols = new Set(this.all('PRAGMA table_info(session_task_links)').map((c) => c.name))
     if (!linkCols.has('selection_order')) this.db.run('ALTER TABLE session_task_links ADD COLUMN selection_order INTEGER NOT NULL DEFAULT 0')
+    if (!linkCols.has('reason')) this.db.run("ALTER TABLE session_task_links ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_world_nodes_region ON world_nodes(region_id, sort_order);
       CREATE INDEX IF NOT EXISTS idx_world_edges_nodes ON world_edges(from_node_id, to_node_id);
@@ -813,10 +814,11 @@ class StudyDatabase {
           xpAwarded += amount
           primaryResult.completed = true; primaryResult.xpAwarded = amount
           if (amount === 0) primaryResult.reason = task.completion_xp_awarded ? 'already_awarded' : 'short_session'
+          else primaryResult.reason = 'awarded'
         } else if (task && task.completion_xp_awarded) {
-          primaryResult.completed = true; primaryResult.alreadyAwarded = true
+          primaryResult.completed = true; primaryResult.alreadyAwarded = true; primaryResult.reason = 'already_awarded'
         } else if (task) {
-          primaryResult.completed = true; primaryResult.xpAwarded = 0
+          primaryResult.completed = true; primaryResult.xpAwarded = 0; primaryResult.reason = 'short_session'
         } else {
           primaryResult.completed = false
         }
@@ -830,8 +832,7 @@ class StudyDatabase {
         const task = this.one("SELECT * FROM tasks WHERE id = ? AND status IN ('todo','doing')", [tid])
         const result = { taskId: tid, title: task?.title || '', order: index, completed: false, xpAwarded: 0, alreadyAwarded: false, reason: 'awarded' }
         if (!task) { result.reason = 'invalid'; contributedResults.push(result); return }
-        this.run("INSERT OR IGNORE INTO session_task_links (session_id, task_id, role, selection_order, xp_awarded, created_at) VALUES (?, ?, 'contributed', ?, 0, ?)", [id, tid, index, now], false)
-        this.run("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?", [now, now, tid], false)
+        // Determine reason before persisting
         if (task.completion_xp_awarded) {
           result.alreadyAwarded = true; result.completed = true; result.reason = 'already_awarded'
         } else if (activeSeconds < 300) {
@@ -844,7 +845,6 @@ class StudyDatabase {
           if (awarded > 0) {
             this.insertXp('contributed_completion', awarded, 'task', tid, `沿途完成：${task.title}`, false)
             this.run('UPDATE tasks SET completion_xp_awarded = 1 WHERE id = ?', [tid], false)
-            this.run('UPDATE session_task_links SET xp_awarded = ? WHERE session_id = ? AND task_id = ?', [awarded, id, tid], false)
             contributedXpRunning += awarded
             result.xpAwarded = awarded; result.reason = 'awarded'
           } else {
@@ -852,6 +852,13 @@ class StudyDatabase {
           }
           result.completed = true
         }
+        // UPSERT with correct reason and xp_awarded
+        this.run(`INSERT INTO session_task_links (session_id, task_id, role, selection_order, xp_awarded, reason, created_at)
+          VALUES (?, ?, 'contributed', ?, ?, ?, ?)
+          ON CONFLICT(session_id, task_id)
+          DO UPDATE SET role = excluded.role, selection_order = excluded.selection_order, xp_awarded = excluded.xp_awarded, reason = excluded.reason`,
+          [id, tid, index, result.xpAwarded, result.reason, now], false)
+        this.run("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?", [now, now, tid], false)
         contributedResults.push(result)
       })
       expedition = this.createExpeditionReward({
@@ -1256,7 +1263,7 @@ class StudyDatabase {
   }
 
   getContributedTasks(sessionId) {
-    return this.all(`SELECT l.task_id, l.selection_order, l.xp_awarded, t.title, a.name AS area_name, a.color AS area_color
+    return this.all(`SELECT l.task_id, l.selection_order, l.xp_awarded, l.reason, t.title, a.name AS area_name, a.color AS area_color
       FROM session_task_links l
       JOIN tasks t ON t.id = l.task_id
       LEFT JOIN areas a ON a.id = t.area_id
