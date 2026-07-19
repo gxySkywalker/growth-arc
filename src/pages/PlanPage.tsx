@@ -173,16 +173,16 @@ export function PlanPage() {
   }
 
   const archiveArea = async (id: string) => {
-    try { await window.growthArc.structure.archiveArea(id); notify('领域已归档', 'info'); await Promise.all([refresh(), loadManaged()]) }
+    try { await window.growthArc.structure.archiveArea(id); notify('方向已归档', 'info'); await Promise.all([refresh(), loadManaged()]) }
     catch (e) { notify(friendlyError(e), 'error') }
   }
   const restoreArea = async (id: string) => {
-    try { await window.growthArc.structure.restoreArea(id); notify('领域已恢复', 'success'); await Promise.all([refresh(), loadManaged()]) }
+    try { await window.growthArc.structure.restoreArea(id); notify('方向已恢复', 'success'); await Promise.all([refresh(), loadManaged()]) }
     catch (e) { notify(friendlyError(e), 'error') }
   }
   const deleteArea = async (id: string) => {
-    if (!window.confirm('确定删除这个领域吗？此操作不可撤销。')) return
-    try { await window.growthArc.structure.deleteArea(id); notify('领域已删除', 'info'); await Promise.all([refresh(), loadManaged()]) }
+    if (!window.confirm('确定删除这个方向吗？此操作不可撤销。')) return
+    try { await window.growthArc.structure.deleteArea(id); notify('方向已删除', 'info'); await Promise.all([refresh(), loadManaged()]) }
     catch (e) { notify(friendlyError(e), 'error') }
   }
 
@@ -196,8 +196,8 @@ export function PlanPage() {
     if (!isActive && !isDone) parts.push('已归档')
     return parts.join(' · ')
   }
-  const modalTitle = form === 'area' ? (editId ? '编辑领域' : '绘制新的探索区域')
-    : form === 'area-manage' ? '学习领域管理'
+  const modalTitle = form === 'area' ? (editId ? '编辑方向' : '新建旅途方向')
+    : form === 'area-manage' ? '方向管理'
     : form === 'goal' ? (editId ? '编辑目标分组' : '新建目标分组')
     : editId ? '编辑路标' : '放置路标'
 
@@ -216,10 +216,10 @@ export function PlanPage() {
     <div className="cartography-body">
       <aside className="cartography-sidebar panel">
         <div className="section-heading">
-          <div style={{display:'flex',alignItems:'baseline',gap:6}}><span className="eyebrow">学习领域</span><h2 style={{margin:0,fontSize:17}}>{activeAreas.length} 个</h2></div>
+          <div style={{display:'flex',alignItems:'baseline',gap:6}}><span className="eyebrow">旅途方向</span></div>
           <div style={{display:'flex',gap:4}}>
-            <button className="icon-button" onClick={() => openForm('area')} title="新建领域"><Icon name="plus" size={18} /></button>
-            <button className="icon-button" onClick={() => setForm('area-manage')} title="管理领域"><Icon name="settings" size={16} /></button>
+            <button className="icon-button" onClick={() => openForm('area')} title="新建方向"><Icon name="plus" size={18} /></button>
+            <button className="icon-button" onClick={() => setForm('area-manage')} title="管理方向"><Icon name="settings" size={16} /></button>
           </div>
         </div>
         <div className="area-nav">{activeAreas.map(a => <button key={a.id} className={a.id === areaId ? 'active' : ''} onClick={() => { setSelectedArea(a.id); setSelectedGoal(null); setStatusFilter('active') }}><i style={{ background: a.color }} /><span>{a.name}</span><b>{counts[a.id] || 0}</b></button>)}</div>
@@ -237,7 +237,7 @@ export function PlanPage() {
         </div>
 
         {view === 'map' && statusFilter === 'active' && <div className="cartography-map-head">
-          <span className="color-dot large" style={{ background: area?.color }} /><div><span className="eyebrow">正在查看</span><h2>{area?.name || '未命名区域'}</h2></div>
+          <span className="color-dot large" style={{ background: area?.color }} /><div><span className="eyebrow">当前方向</span><h2>{area?.name || '未命名区域'}</h2></div>
           <button className="button button-secondary button-small" onClick={() => openForm('goal')}><Icon name="flag" size={14} />新建目标分组</button>
         </div>}
         {view === 'map' && statusFilter === 'active' && goals.length > 0 && <div className="goal-tabs">
@@ -295,11 +295,11 @@ export function PlanPage() {
 
     {form && form !== 'area-manage' && <Modal title={modalTitle} onClose={() => setForm(null)}>
       <div className="modal-body form-stack">
-        <label>{form === 'area' ? '领域名称' : form === 'goal' ? '分组名称' : '路标名称'}<input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={form === 'area' ? '例如：Java 后端' : form === 'goal' ? '例如：Redis 专题' : '例如：实现分布式锁'} /></label>
+        <label>{form === 'area' ? '方向名称' : form === 'goal' ? '分组名称' : '路标名称'}<input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={form === 'area' ? '例如：Java 后端' : form === 'goal' ? '例如：Redis 专题' : '例如：实现分布式锁'} /></label>
         {(form === 'goal' || form === 'task') && <label>说明（可选）<textarea rows={2} value={desc} onChange={e => setDesc(e.target.value)} /></label>}
         {form === 'area' && <fieldset className="color-picker"><legend>识别颜色</legend>{COLORS.map(c => <button key={c.key} className={color === c.value ? 'active' : ''} style={{ background: c.value }} onClick={() => setColor(c.value)} title={c.name} aria-label={c.name} />)}</fieldset>}
         {form === 'task' && !editId && <div className="settlement-note">完成远征并确认路标完成后，将根据真实专注时长获得旅途经验。</div>}
-        {form === 'task' && editId && <label>所属领域<select value={areaId} onChange={e => setSelectedArea(e.target.value)}>{managed.areas.filter(a => !a.archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+        {form === 'task' && editId && <label>所属方向<select value={areaId} onChange={e => setSelectedArea(e.target.value)}>{managed.areas.filter(a => !a.archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
         {form === 'task' && !editId && <label>关联目标分组（可选）<select value={selectedGoal || ''} onChange={e => setSelectedGoal(e.target.value || null)}><option value="">不关联</option>{goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select></label>}
       </div>
       <footer className="modal-footer"><button className="button button-ghost" onClick={() => setForm(null)}>取消</button><button className="button button-primary" disabled={busy || !name.trim()} onClick={() => submit()}>保存</button></footer>
@@ -307,7 +307,7 @@ export function PlanPage() {
 
     {duplicate && <Modal title="发现相似路标" onClose={() => setDuplicate(null)}>
       <div className="modal-body">
-        <p style={{margin:0,color:'var(--muted)',fontSize:14}}>当前领域「{duplicate.areaName}」中已有：</p>
+        <p style={{margin:0,color:'var(--muted)',fontSize:14}}>当前方向「{duplicate.areaName}」中已有：</p>
         <div style={{margin:'8px 0',padding:'8px 10px',background:'rgba(235,219,191,.5)',border:'1px solid rgba(91,62,42,.12)'}}>
           <strong style={{fontSize:16}}>「{duplicate.title}」</strong>
           {duplicate.goalName && <p style={{margin:'4px 0 0',color:'var(--muted)',fontSize:13}}>目标分组：{duplicate.goalName}</p>}
@@ -321,7 +321,7 @@ export function PlanPage() {
       </footer>
     </Modal>}
 
-    {form === 'area-manage' && <Modal title="学习领域管理" onClose={() => setForm(null)} size="wide">
+    {form === 'area-manage' && <Modal title="方向管理" onClose={() => setForm(null)} size="wide">
       <div className="modal-body"><div style={{display:'flex',flexDirection:'column',gap:8}}>
         {activeAreas.map(a => <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid rgba(91,62,42,.08)'}}>
           <i style={{width:14,height:14,background:a.color,flexShrink:0}} /><span style={{flex:1,fontSize:15,fontWeight:700}}>{a.name}</span><span style={{color:'var(--muted)',fontSize:13}}>{counts[a.id] || 0} 路标</span>
@@ -351,6 +351,6 @@ function HelpPopover({ onClose, anchor }: { onClose: () => void; anchor?: DOMRec
   return <div ref={ref} className="help-popover" style={{ position: 'fixed', left, top, zIndex: 500, width: 340 }}>
     <div className="help-popover-item"><strong>路标</strong><p>一件可以真正完成的事，可作为远征目标。</p></div>
     <div className="help-popover-item"><strong>目标分组</strong><p>用来整理一组相关路标，例如章节或项目阶段。</p></div>
-    <div className="help-popover-item"><strong>学习领域</strong><p>用于区分不同方向，例如算法、Java 后端或秋招准备。</p></div>
+    <div className="help-popover-item"><strong>旅途方向</strong><p>用于区分不同方向，例如算法、Java 后端或秋招准备。</p></div>
   </div>
 }

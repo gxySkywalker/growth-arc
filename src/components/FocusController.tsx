@@ -41,9 +41,13 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
   const [contribSearch, setContribSearch] = useState('')
   const [contribArea, setContribArea] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+  const [confirmCancelBusy, setConfirmCancelBusy] = useState(false)
   const [muted, setMuted] = useState(false)
   const [tick, setTick] = useState(Date.now())
   const snapshotAt = useRef(Date.now())
+  const emptyReturnBtnRef = useRef<HTMLButtonElement>(null)
+  const confirmRef = useRef<HTMLDivElement>(null)
   const companions = dashboard?.world.companions.owned || []
 
   useEffect(() => {
@@ -66,6 +70,39 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     }, 30000)
     return () => window.clearInterval(hb)
   }, [activeSession?.id, activeSession?.status, setActiveSession])
+
+  // Esc key dismisses confirm dialog
+  useEffect(() => {
+    if (!confirmCancelOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !confirmCancelBusy) closeConfirmCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmCancelOpen, confirmCancelBusy])
+
+  // Focus trap: Tab cycles between the two confirm buttons
+  useEffect(() => {
+    if (!confirmCancelOpen) return
+    const el = confirmRef.current
+    if (!el) return
+    const btns = el.querySelectorAll<HTMLElement>('button:not([disabled])')
+    if (btns.length < 2) return
+    const first = btns[0]
+    const last = btns[btns.length - 1]
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || confirmCancelBusy) return
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    window.addEventListener('keydown', trap)
+    return () => window.removeEventListener('keydown', trap)
+  }, [confirmCancelOpen, confirmCancelBusy])
+
+  // Clean up confirm dialog if return checklist closes externally
+  useEffect(() => {
+    if (!stopOpen) setConfirmCancelOpen(false)
+  }, [stopOpen])
 
   const elapsed = useMemo(() => {
     if (!activeSession) return 0
@@ -119,10 +156,32 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     } catch (e) { notify(friendlyError(e), 'error') } finally { setBusy(false) }
   }
 
-  const cancel = async () => {
+  const cancel = () => {
     if (!activeSession) return
-    if (!window.confirm('空手返回将不结算经验、不完成路标、不生成返程发现。确定吗？')) return
-    try { await window.growthArc.session.cancel(activeSession.id); setActiveSession(null); setStopOpen(false); await refresh() } catch (e) { notify(friendlyError(e), 'error') }
+    setConfirmCancelOpen(true)
+  }
+
+  const closeConfirmCancel = () => {
+    if (confirmCancelBusy) return
+    setConfirmCancelOpen(false)
+    requestAnimationFrame(() => emptyReturnBtnRef.current?.focus())
+  }
+
+  const confirmCancel = async () => {
+    if (!activeSession || confirmCancelBusy) return
+    const sessionId = activeSession.id
+    setConfirmCancelBusy(true)
+    try {
+      await window.growthArc.session.cancel(sessionId)
+      setConfirmCancelOpen(false)
+      setActiveSession(null)
+      setStopOpen(false)
+      await refresh()
+    } catch (e) {
+      notify(friendlyError(e), 'error')
+    } finally {
+      setConfirmCancelBusy(false)
+    }
   }
 
   const plannedSeconds = Number(activeSession?.planned_seconds || 1500)
@@ -140,6 +199,17 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
   const outcomeText = normalizeText(stopResult?.session?.outcome)
   const relicText = normalizeText(expedition?.knowledgeRelic?.content)
   const showRelicContent = !!relicText && relicText !== outcomeText
+
+  // Compact layout conditions
+  const completedContributed = stopResult?.contributedTasks?.filter((t: any) => t.completed) ?? []
+  const useCompactResults =
+    !!stopResult?.primaryTask?.completed &&
+    completedContributed.length >= 1 &&
+    completedContributed.length <= 2
+  const isCompactScene = !expedition?.rareFound && !expedition?.newCompanion
+  const drops = expedition?.drops ?? []
+  const hasRelic = !!expedition?.knowledgeRelic
+  const compactRewards = drops.length <= 2 && !expedition?.rareFound
 
   return <>
     {activeSession ? <section className={`focus-expedition ${activeSession.status === 'paused' ? 'is-paused' : ''}`}>
@@ -204,19 +274,19 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
             </span>
             <span className="return-primary-info">
               <strong>{activeSession.content}</strong>
-              <small>确认后完成并结算旅途经验</small>
+              <small>确认后，这枚路标将记为已抵达</small>
             </span>
           </label>
         </div>}
 
         <div className="return-contributed">
           <span className="return-section-label">沿途抵达</span>
-          {elapsed < 300 && <div className="contrib-short-notice">本次有效专注不足 5 分钟。沿途路标仍会记录完成，但不会追加沿途经验。</div>}
+          {elapsed < 300 && <div className="contrib-short-notice">这次行程较短。抵达的路标仍会留下记录。<small>有效专注达到 5 分钟的远征，才会结算沿途经验。</small></div>}
           <small className="return-contributed-hint">这次远征中，你还抵达了哪些路标？经验按计划顺序依次结算，单场最多 30 XP。</small>
           <div className="return-contributed-filters">
             <input className="contrib-search" placeholder="搜索路标…" value={contribSearch} onChange={e => setContribSearch(e.target.value)} />
             <select className="contrib-area-filter" value={contribArea} onChange={e => setContribArea(e.target.value)}>
-              <option value="">全部领域</option>
+              <option value="">全部方向</option>
               {structure?.areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
@@ -248,11 +318,11 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
           主要路标：{taskCompleted ? '已确认' : '未确认'}
           <span>·</span>
           沿途抵达：{contributed.length} 处
-          {elapsed >= 300 ? <><span>·</span>预计沿途经验：<span className="contrib-xp-sum">+{xpTotal} XP</span></> : <><span>·</span><span className="contrib-xp-sum">行程较短，本次不追加</span></>}
+          {elapsed >= 300 && <><span>·</span>预计沿途经验：<span className="contrib-xp-sum">+{xpTotal} XP</span></>}
           {xpTotal >= CONTRIB_XP_CAP && <span className="contrib-cap-note">已达到本场沿途经验上限，其余路标仍会正常记录为完成</span>}
         </div>}
         <footer className="modal-footer split-footer">
-          <button className="button button-danger-ghost" onClick={cancel}>空手返回</button>
+          <button className="button button-danger-ghost" ref={emptyReturnBtnRef} onClick={cancel}>空手返回</button>
           <div>
             <button className="button button-ghost" onClick={() => setStopOpen(false)}>再走一会儿</button>
             <button className="button button-primary" disabled={busy} onClick={stop}><Icon name="home" />带着成果回小屋</button>
@@ -261,35 +331,59 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
       </div>
     </div></div>}
 
+    {/* 确认空手返回 */}
+    {confirmCancelOpen && (
+      <Modal title="确认空手返回？" onClose={closeConfirmCancel} className="empty-return-confirm-modal">
+        <div ref={confirmRef} className="empty-return-confirm">
+          <div className="modal-body empty-return-confirm-body">
+            <p className="empty-return-confirm-message">这次远征将只保留专注时长。</p>
+            <p className="empty-return-confirm-detail">不会抵达路标，也不会带回旅途收获。</p>
+          </div>
+          <footer className="modal-footer empty-return-confirm-footer">
+            <button className="button button-ghost" onClick={closeConfirmCancel} disabled={confirmCancelBusy} autoFocus>继续清点</button>
+            <button className="button button-danger" onClick={confirmCancel} disabled={confirmCancelBusy}>空手返回</button>
+          </footer>
+        </div>
+      </Modal>
+    )}
+
     {/* 远征归来结果 */}
     {expedition && (
       <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="return-result-modal">
         <div className="return-result-scroll">
-          <div className="return-scene">
+          <div className={`return-scene${isCompactScene ? ' return-scene-compact' : ''}`}>
             <span className="return-tier">{expedition.tier.name}</span><h2>{expedition.location}</h2><p>{expedition.event}</p>
             <div className="chest"><i /><b>✦</b></div>
           </div>
           <div className="modal-body reward-body">
-            {stopResult && (stopResult.primaryTask.completed || stopResult.contributedTasks.length > 0) && <div className="stop-task-results">
+            {stopResult && (stopResult.primaryTask.completed || stopResult.contributedTasks.length > 0) && <div className={`stop-task-results${useCompactResults ? ' stop-task-results-compact' : ''}`}>
               {stopResult.primaryTask.completed && <div className="stop-result-item">
                 <span>主要抵达</span>
                 <strong>{sessionTitle}</strong>
                 {stopResult.primaryTask.xpAwarded > 0 && <em>旅途经验 +{stopResult.primaryTask.xpAwarded}</em>}
-                {stopResult.primaryTask.alreadyAwarded && <em>经验已在此前领取</em>}
+                {stopResult.primaryTask.xpAwarded === 0 && stopResult.primaryTask.reason === 'already_awarded' && <em>这枚路标此前已有记录</em>}
+                {stopResult.primaryTask.xpAwarded === 0 && stopResult.primaryTask.reason === 'short_session' && <em>路标已完成</em>}
+                {stopResult.primaryTask.xpAwarded === 0 && !stopResult.primaryTask.reason && <em>路标已完成</em>}
               </div>}
               {stopResult.contributedTasks.filter((t: any) => t.completed).map((t: any) => <div key={t.taskId} className="stop-result-item contributed">
                 <span>沿途抵达</span>
                 <strong>{t.title}</strong>
                 {t.xpAwarded > 0 && <em>+{t.xpAwarded} XP</em>}
-                {t.alreadyAwarded && <em>经验已在此前领取</em>}
-                {t.reason === 'short_session' && <em>行程较短，本次不追加</em>}
-                {t.reason === 'xp_cap_reached' && <em>已达本场上限</em>}
+                {!t.xpAwarded && t.alreadyAwarded && <em>已有记录</em>}
+                {t.reason === 'short_session' && <em>行程较短</em>}
+                {t.reason === 'xp_cap_reached' && <em>沿途收获已满</em>}
               </div>)}
             </div>}
-            <header><div><small>本次收获</small><h3>{expedition.rareFound ? '宝箱里闪着少见的光' : '行囊装得满满当当'}</h3></div><span>羁绊 +{expedition.bondXp}</span></header>
-            <div className="reward-grid">{expedition.drops.map(d => <article className={d.item.rarity} key={d.item.id}><span><Icon name={d.item.icon} size={20} style={{color:d.item.rarity==='rare'?'var(--gold)':'inherit'}} /></span><div><small>{d.item.rarity==='rare'?'稀有宝藏':'常规掉落'}</small><strong>{d.item.name}</strong><p>{d.item.description}</p></div><b>×{d.quantity}</b></article>)}</div>
+            <header><div><small>本次收获</small>{expedition.rareFound && <h3>宝箱里闪着少见的光</h3>}</div><span>羁绊 +{expedition.bondXp}</span></header>
+            <div className={compactRewards ? 'reward-grid reward-grid-compact' : 'reward-grid'}>
+              {drops.map(d => <article className={d.item.rarity} key={d.item.id}><span><Icon name={d.item.icon} size={20} style={{color:d.item.rarity==='rare'?'var(--gold)':'inherit'}} /></span><div><small>{d.item.rarity==='rare'?'稀有宝藏':'常规掉落'}</small><strong>{d.item.name}</strong><p>{d.item.description}</p></div><b>×{d.quantity}</b></article>)}
+              {hasRelic && (
+                <div className={compactRewards ? 'relic-return relic-return-inline' : 'relic-return relic-return-wide'}>
+                  <span>▤</span><div><small>知识遗物已经归档</small><strong>{expedition.knowledgeRelic!.title}</strong>{showRelicContent && <p>{expedition.knowledgeRelic!.content}</p>}</div>
+                </div>
+              )}
+            </div>
             {expedition.newCompanion && <div className="new-friend"><PixelCompanion companion={expedition.newCompanion} size="medium" /><div><small>旅途中传来了新的脚步声</small><h3>遇见了 {expedition.newCompanion.species.name}</h3><p>{expedition.newCompanion.species.description}</p></div></div>}
-            {expedition.knowledgeRelic && <div className="relic-return"><span>▤</span><div><small>知识遗物已经归档</small><strong>{expedition.knowledgeRelic.title}</strong>{showRelicContent && <p>{expedition.knowledgeRelic.content}</p>}</div></div>}
           </div>
         </div>
         <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>把宝藏放回小屋</button></footer>
