@@ -254,7 +254,20 @@ class StudyDatabase {
       CREATE INDEX IF NOT EXISTS idx_sessions_started ON focus_sessions(started_at);
       CREATE INDEX IF NOT EXISTS idx_intervals_session ON focus_intervals(session_id);
       CREATE INDEX IF NOT EXISTS idx_companions_active ON companions(is_active);
+      CREATE TABLE IF NOT EXISTS session_task_links (
+        session_id TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,
+        task_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'contributed',
+        selection_order INTEGER NOT NULL DEFAULT 0,
+        xp_awarded INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        UNIQUE(session_id, task_id)
+      );
       CREATE INDEX IF NOT EXISTS idx_relics_created ON knowledge_relics(created_at);
+    `)
+    const linkCols = new Set(this.all('PRAGMA table_info(session_task_links)').map((c) => c.name))
+    if (!linkCols.has('selection_order')) this.db.run('ALTER TABLE session_task_links ADD COLUMN selection_order INTEGER NOT NULL DEFAULT 0')
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_world_nodes_region ON world_nodes(region_id, sort_order);
       CREATE INDEX IF NOT EXISTS idx_world_edges_nodes ON world_edges(from_node_id, to_node_id);
       CREATE INDEX IF NOT EXISTS idx_world_events_occurred ON world_events(occurred_at);
@@ -263,6 +276,12 @@ class StudyDatabase {
     const sessionColumns = new Set(this.all('PRAGMA table_info(focus_sessions)').map((column) => column.name))
     if (!sessionColumns.has('companion_id')) this.db.run('ALTER TABLE focus_sessions ADD COLUMN companion_id TEXT')
     if (!sessionColumns.has('planned_seconds')) this.db.run('ALTER TABLE focus_sessions ADD COLUMN planned_seconds INTEGER NOT NULL DEFAULT 1500')
+    const taskColumns = new Set(this.all('PRAGMA table_info(tasks)').map((column) => column.name))
+    if (!taskColumns.has('sort_order')) {
+      this.db.run('ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0')
+      const legacy = this.all("SELECT id FROM tasks ORDER BY CASE status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END, created_at DESC")
+      legacy.forEach((row, i) => this.run('UPDATE tasks SET sort_order = ? WHERE id = ?', [i + 1, row.id], false))
+    }
     this.save()
   }
 
@@ -535,7 +554,15 @@ class StudyDatabase {
     return {
       areas: this.all('SELECT * FROM areas WHERE archived = 0 ORDER BY created_at'),
       goals: this.all("SELECT * FROM goals WHERE status != 'archived' ORDER BY created_at DESC"),
-      tasks: this.all("SELECT * FROM tasks WHERE status != 'archived' ORDER BY CASE status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END, created_at DESC"),
+      tasks: this.all("SELECT * FROM tasks WHERE status != 'archived' ORDER BY sort_order ASC, created_at ASC, id ASC"),
+    }
+  }
+
+  getAllStructure() {
+    return {
+      areas: this.all('SELECT * FROM areas ORDER BY archived, created_at'),
+      goals: this.all('SELECT * FROM goals ORDER BY status, created_at DESC'),
+      tasks: this.all('SELECT * FROM tasks ORDER BY CASE WHEN status IN (\'todo\',\'doing\') THEN 0 WHEN status = \'done\' THEN 1 ELSE 2 END, sort_order ASC, created_at ASC, id ASC'),
     }
   }
 
@@ -564,8 +591,9 @@ class StudyDatabase {
     if (!this.one('SELECT id FROM areas WHERE id = ?', [areaId])) throw new Error('请选择有效领域')
     if (goalId && !this.one('SELECT id FROM goals WHERE id = ?', [goalId])) throw new Error('目标不存在')
     if (!String(title || '').trim()) throw new Error('事项名称不能为空')
-    this.run('INSERT INTO tasks (id, area_id, goal_id, title, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
-      id, areaId, goalId || null, title.trim(), String(notes || '').trim(), now, now,
+    const maxOrder = Number(this.one('SELECT COALESCE(MAX(sort_order), 0) AS m FROM tasks').m)
+    this.run('INSERT INTO tasks (id, area_id, goal_id, title, notes, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
+      id, areaId, goalId || null, title.trim(), String(notes || '').trim(), maxOrder + 1, now, now,
     ])
     return this.one('SELECT * FROM tasks WHERE id = ?', [id])
   }
@@ -588,19 +616,97 @@ class StudyDatabase {
         now,
         id,
       ], false)
-      if (status === 'done' && !task.completion_xp_awarded) this.awardTaskCompletion(id, false)
+      if (status === 'done' && !task.completion_xp_awarded) this.awardTaskCompletion(id, false, true)
     })
     const unlocked = this.checkAchievements()
     return { task: this.one('SELECT * FROM tasks WHERE id = ?', [id]), unlocked }
+  }
+
+  reorderTasks(items) {
+    this.transaction(() => {
+      for (const { id, sortOrder } of items) {
+        this.run('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [sortOrder, Date.now(), id], false)
+      }
+    })
+  }
+
+  deleteTask(id) {
+    const refs = Number(this.one('SELECT COUNT(*) AS count FROM focus_sessions WHERE task_id = ?', [id]).count)
+    if (refs > 0) throw new Error('该路标已被远征记录引用，不可删除。请改为归档。')
+    this.run('DELETE FROM tasks WHERE id = ?', [id])
+  }
+
+  reopenTask(id) {
+    const task = this.one('SELECT * FROM tasks WHERE id = ?', [id])
+    if (!task || task.status !== 'done') throw new Error('只能重新打开已完成的路标')
+    this.run('UPDATE tasks SET status = ?, completed_at = NULL, updated_at = ? WHERE id = ?', ['todo', Date.now(), id])
+    return this.one('SELECT * FROM tasks WHERE id = ?', [id])
+  }
+
+  restoreTask(id) {
+    const task = this.one('SELECT * FROM tasks WHERE id = ?', [id])
+    if (!task || task.status !== 'archived') throw new Error('只能恢复已归档的路标')
+    const targetStatus = task.completed_at ? 'done' : 'todo'
+    this.run('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?', [targetStatus, Date.now(), id])
+    return this.one('SELECT * FROM tasks WHERE id = ?', [id])
+  }
+
+  updateGoal(id, { title, description }) {
+    const goal = this.one('SELECT * FROM goals WHERE id = ?', [id])
+    if (!goal) throw new Error('目标分组不存在')
+    this.run('UPDATE goals SET title = ?, description = ?, updated_at = ? WHERE id = ?', [
+      String(title || goal.title).trim() || goal.title,
+      description !== undefined ? String(description || '').trim() : goal.description,
+      Date.now(), id,
+    ])
+    return this.one('SELECT * FROM goals WHERE id = ?', [id])
+  }
+
+  restoreGoal(id) {
+    const goal = this.one("SELECT * FROM goals WHERE id = ? AND status = 'archived'", [id])
+    if (!goal) throw new Error('只能恢复已归档的目标分组')
+    this.run("UPDATE goals SET status = 'active', updated_at = ? WHERE id = ?", [Date.now(), id])
+    return this.one('SELECT * FROM goals WHERE id = ?', [id])
   }
 
   archiveGoal(id) {
     this.run("UPDATE goals SET status = 'archived', updated_at = ? WHERE id = ?", [Date.now(), id])
   }
 
+  updateArea(id, { name, color }) {
+    const area = this.one('SELECT * FROM areas WHERE id = ?', [id])
+    if (!area) throw new Error('领域不存在')
+    this.run('UPDATE areas SET name = ?, color = ? WHERE id = ?', [
+      String(name || area.name).trim() || area.name,
+      color || area.color,
+      id,
+    ])
+    return this.one('SELECT * FROM areas WHERE id = ?', [id])
+  }
+
+  restoreArea(id) {
+    const area = this.one('SELECT * FROM areas WHERE id = ? AND archived = 1', [id])
+    if (!area) throw new Error('只能恢复已归档的领域')
+    this.run('UPDATE areas SET archived = 0 WHERE id = ?', [id])
+    return this.one('SELECT * FROM areas WHERE id = ?', [id])
+  }
+
+  deleteArea(id) {
+    const activeCount = Number(this.one('SELECT COUNT(*) AS count FROM areas WHERE archived = 0').count)
+    if (activeCount <= 1 && !this.one('SELECT archived FROM areas WHERE id = ?', [id])?.archived) throw new Error('至少保留一个活跃学习领域')
+    const refTasks = Number(this.one('SELECT COUNT(*) AS count FROM tasks WHERE area_id = ?', [id]).count)
+    const refGoals = Number(this.one('SELECT COUNT(*) AS count FROM goals WHERE area_id = ?', [id]).count)
+    const refSessions = Number(this.one('SELECT COUNT(*) AS count FROM focus_sessions WHERE area_id = ?', [id]).count)
+    if (refTasks > 0 || refGoals > 0) throw new Error(`该领域下还有 ${refTasks} 个路标和 ${refGoals} 个目标分组，请先移动或清理`)
+    if (refSessions > 0) throw new Error('该领域已有关联远征历史，不可删除。请改为归档。')
+    this.run('DELETE FROM areas WHERE id = ?', [id])
+  }
+
   archiveArea(id) {
     const areaCount = Number(this.one('SELECT COUNT(*) AS count FROM areas WHERE archived = 0').count)
-    if (areaCount <= 1) throw new Error('至少保留一个学习领域')
+    const activeTasks = Number(this.one("SELECT COUNT(*) AS count FROM tasks WHERE area_id = ? AND status IN ('todo','doing')", [id]).count)
+    if (activeTasks > 0) throw new Error(`该领域下还有 ${activeTasks} 个进行中路标，请先移动或完成`)
+    if (areaCount <= 1) throw new Error('至少保留一个活跃学习领域')
     this.run('UPDATE areas SET archived = 1 WHERE id = ?', [id])
   }
 
@@ -678,12 +784,14 @@ class StudyDatabase {
     return null
   }
 
-  stopSession(id, { outcome = '', blocker = '', nextStep = '', taskCompleted = false } = {}) {
+  stopSession(id, { outcome = '', blocker = '', nextStep = '', taskCompleted = false, contributedTaskIds = [] } = {}) {
     const session = this.one("SELECT * FROM focus_sessions WHERE id = ? AND status IN ('running', 'paused')", [id])
     if (!session) throw new Error('没有可结束的专注')
     const now = Date.now()
     let xpAwarded = 0
     let expedition = null
+    const primaryResult = { taskId: session.task_id, completed: false, xpAwarded: 0, alreadyAwarded: false }
+    const contributedResults = []
     this.transaction(() => {
       this.run('UPDATE focus_intervals SET ended_at = ? WHERE session_id = ? AND ended_at IS NULL', [now, id], false)
       const activeSeconds = this.sessionActiveSeconds(id, now)
@@ -694,13 +802,58 @@ class StudyDatabase {
       if (xpAwarded > 0) {
         this.insertXp('focus', xpAwarded, 'session', id, `专注 ${Math.round(activeSeconds / 60)} 分钟`, false)
       }
+      // Primary task — requires both this session >= 300s AND total accumulated >= 300s
       if (taskCompleted && session.task_id) {
         const task = this.one('SELECT * FROM tasks WHERE id = ?', [session.task_id])
         if (task && task.status !== 'done') {
           this.run("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?", [now, now, task.id], false)
         }
-        if (task && !task.completion_xp_awarded) xpAwarded += this.awardTaskCompletion(task.id, false)
+        if (task && !task.completion_xp_awarded && activeSeconds >= 300) {
+          const amount = this.awardTaskCompletion(task.id, false, true)
+          xpAwarded += amount
+          primaryResult.completed = true; primaryResult.xpAwarded = amount
+          if (amount === 0) primaryResult.reason = task.completion_xp_awarded ? 'already_awarded' : 'short_session'
+        } else if (task && task.completion_xp_awarded) {
+          primaryResult.completed = true; primaryResult.alreadyAwarded = true
+        } else if (task) {
+          primaryResult.completed = true; primaryResult.xpAwarded = 0
+        } else {
+          primaryResult.completed = false
+        }
       }
+      // Contributed tasks — no hard limit, XP decays
+      const uniqueTasks = [...new Set(contributedTaskIds)].filter(tid => tid && tid !== session.task_id)
+      let contributedXpRunning = 0
+      const CONTRIBUTED_XP_CAP = 30
+      const DECAY = [10, 8, 6, 4, 2] // indices 0-3, then 2 for index 4+
+      uniqueTasks.forEach((tid, index) => {
+        const task = this.one("SELECT * FROM tasks WHERE id = ? AND status IN ('todo','doing')", [tid])
+        const result = { taskId: tid, title: task?.title || '', order: index, completed: false, xpAwarded: 0, alreadyAwarded: false, reason: 'awarded' }
+        if (!task) { result.reason = 'invalid'; contributedResults.push(result); return }
+        this.run("INSERT OR IGNORE INTO session_task_links (session_id, task_id, role, selection_order, xp_awarded, created_at) VALUES (?, ?, 'contributed', ?, 0, ?)", [id, tid, index, now], false)
+        this.run("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?", [now, now, tid], false)
+        if (task.completion_xp_awarded) {
+          result.alreadyAwarded = true; result.completed = true; result.reason = 'already_awarded'
+        } else if (activeSeconds < 300) {
+          result.completed = true; result.reason = 'short_session'
+        } else if (contributedXpRunning >= CONTRIBUTED_XP_CAP) {
+          result.completed = true; result.reason = 'xp_cap_reached'
+        } else {
+          const xp = index < DECAY.length ? DECAY[index] : 2
+          const awarded = Math.min(xp, CONTRIBUTED_XP_CAP - contributedXpRunning)
+          if (awarded > 0) {
+            this.insertXp('contributed_completion', awarded, 'task', tid, `沿途完成：${task.title}`, false)
+            this.run('UPDATE tasks SET completion_xp_awarded = 1 WHERE id = ?', [tid], false)
+            this.run('UPDATE session_task_links SET xp_awarded = ? WHERE session_id = ? AND task_id = ?', [awarded, id, tid], false)
+            contributedXpRunning += awarded
+            result.xpAwarded = awarded; result.reason = 'awarded'
+          } else {
+            result.reason = 'xp_cap_reached'
+          }
+          result.completed = true
+        }
+        contributedResults.push(result)
+      })
       expedition = this.createExpeditionReward({
         sessionId: id,
         activeSeconds,
@@ -713,7 +866,14 @@ class StudyDatabase {
       })
     })
     const unlocked = this.checkAchievements()
-    return { session: this.one('SELECT * FROM focus_sessions WHERE id = ?', [id]), xpAwarded, unlocked, expedition }
+    return {
+      session: this.one('SELECT * FROM focus_sessions WHERE id = ?', [id]),
+      xpAwarded,
+      unlocked,
+      expedition,
+      primaryTask: primaryResult,
+      contributedTasks: contributedResults,
+    }
   }
 
   createExpeditionReward({ sessionId, activeSeconds, companionId, content, outcome, blocker, nextStep, createdAt }) {
@@ -936,15 +1096,39 @@ class StudyDatabase {
       .reduce((sum, row) => sum + Math.max(0, Math.floor(((row.ended_at || openEnd) - row.started_at) / 1000)), 0)
   }
 
-  awardTaskCompletion(taskId, persist = true) {
+  awardTaskCompletion(taskId, persist = true, inTransaction = false) {
     const task = this.one('SELECT * FROM tasks WHERE id = ?', [taskId])
     if (!task || task.completion_xp_awarded) return 0
     const total = Number(this.one("SELECT COALESCE(SUM(active_seconds), 0) AS total FROM focus_sessions WHERE task_id = ? AND status = 'completed'", [taskId]).total)
+    if (total < 300) return 0 // unified 5-min threshold
     const amount = completionXp(total)
-    this.insertXp('completion', amount, 'task', taskId, `完成：${task.title}`, false)
-    this.run('UPDATE tasks SET completion_xp_awarded = 1 WHERE id = ?', [taskId], false)
-    if (persist) this.save()
+    if (amount > 0) {
+      this.insertXp('completion', amount, 'task', taskId, `完成：${task.title}`, false)
+      this.run('UPDATE tasks SET completion_xp_awarded = 1 WHERE id = ?', [taskId], false)
+    }
+    if (persist && !inTransaction) this.save()
     return amount
+  }
+
+  manualCompleteTask(taskId) {
+    let xpAwarded = 0
+    let alreadyAwarded = false
+    const now = Date.now()
+    this.transaction(() => {
+      const task = this.one('SELECT * FROM tasks WHERE id = ?', [taskId])
+      if (!task) throw new Error('路标不存在')
+      if (task.status === 'archived') throw new Error('已归档的路标不能直接完成，请先恢复')
+      if (task.status === 'done') throw new Error('路标已经是完成状态')
+      // Always update status to done first
+      this.run('UPDATE tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?', ['done', now, now, taskId], false)
+      // Then handle XP — awardTaskCompletion checks completion_xp_awarded internally
+      if (!task.completion_xp_awarded) {
+        xpAwarded = this.awardTaskCompletion(taskId, false, true)
+      } else {
+        alreadyAwarded = true
+      }
+    })
+    return { xpAwarded, alreadyAwarded }
   }
 
   insertXp(kind, amount, referenceType, referenceId, label, persist = true) {
@@ -1071,14 +1255,46 @@ class StudyDatabase {
     }
   }
 
+  getContributedTasks(sessionId) {
+    return this.all(`SELECT l.task_id, l.selection_order, l.xp_awarded, t.title, a.name AS area_name, a.color AS area_color
+      FROM session_task_links l
+      JOIN tasks t ON t.id = l.task_id
+      LEFT JOIN areas a ON a.id = t.area_id
+      WHERE l.session_id = ?
+      ORDER BY l.selection_order, t.sort_order`, [sessionId])
+  }
+
   getHistory(limit = 80) {
-    return this.all(`SELECT s.*, t.title AS task_title, a.name AS area_name, a.color AS area_color
+    const sessions = this.all(`SELECT s.*, t.title AS task_title, a.name AS area_name, a.color AS area_color
       FROM focus_sessions s
       LEFT JOIN tasks t ON t.id = s.task_id
       LEFT JOIN areas a ON a.id = s.area_id
       WHERE s.status = 'completed'
       ORDER BY s.ended_at DESC LIMIT ?`, [Math.max(1, Math.min(Number(limit) || 80, 200))])
-      .map((session) => ({ ...session, expedition: this.getExpedition(session.id) }))
+    if (!sessions.length) return []
+    const ids = sessions.map((s) => `'${s.id}'`).join(',')
+    const xpRows = this.all(`SELECT reference_id, SUM(amount) AS xp FROM xp_transactions WHERE reference_type = 'session' AND reference_id IN (${ids}) GROUP BY reference_id`)
+    const xpMap = Object.fromEntries(xpRows.map((r) => [r.reference_id, Number(r.xp)]))
+    // add completion XP — only for the FIRST session that completed each task
+    const completedTaskIds = [...new Set(sessions.filter((s) => s.task_completed && s.task_id).map((s) => s.task_id))]
+    if (completedTaskIds.length) {
+      const quoted = completedTaskIds.map((id) => `'${id}'`).join(',')
+      const taskXpRows = this.all(`SELECT reference_id, amount FROM xp_transactions WHERE reference_type = 'task' AND kind = 'completion' AND reference_id IN (${quoted})`)
+      const taskXpByTaskId = Object.fromEntries(taskXpRows.map((r) => [r.reference_id, Number(r.amount)]))
+      // find the earliest session that completed each task (by ended_at)
+      const firstCompletionSession = new Map()
+      for (const session of sessions) {
+        if (!session.task_completed || !session.task_id || !taskXpByTaskId[session.task_id]) continue
+        const existing = firstCompletionSession.get(session.task_id)
+        if (!existing || (session.ended_at && session.ended_at < existing.ended_at)) {
+          firstCompletionSession.set(session.task_id, session)
+        }
+      }
+      for (const [taskId, session] of firstCompletionSession) {
+        xpMap[session.id] = (xpMap[session.id] || 0) + taskXpByTaskId[taskId]
+      }
+    }
+    return sessions.map((session) => ({ ...session, xp_awarded: xpMap[session.id] || 0, expedition: this.getExpedition(session.id), contributedTasks: this.getContributedTasks(session.id) }))
   }
 
   saveDailyReview(data) {
