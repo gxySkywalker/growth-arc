@@ -29,6 +29,7 @@ export interface Task {
   status: 'todo' | 'doing' | 'done' | 'archived'
   completed_at: number | null
   completion_xp_awarded: number
+  sort_order: number
   created_at: number
   updated_at: number
 }
@@ -53,7 +54,9 @@ export interface FocusSession {
   task_title?: string
   area_name?: string
   area_color?: string
+  xp_awarded?: number
   expedition?: ExpeditionResult | null
+  contributedTasks?: Array<{ task_id: string; selection_order: number; xp_awarded: number; title: string; area_name: string; area_color: string }>
 }
 
 export interface CompanionSpecies {
@@ -330,12 +333,23 @@ export interface GrowthArcApi {
   }
   structure: {
     get: () => Promise<Structure>
+    getAll: () => Promise<Structure>
     createArea: (data: { name: string; color: string }) => Promise<Area>
+    updateArea: (id: string, data: { name?: string; color?: string }) => Promise<Area>
     archiveArea: (id: string) => Promise<void>
+    restoreArea: (id: string) => Promise<Area>
+    deleteArea: (id: string) => Promise<void>
     createGoal: (data: { areaId: string; title: string; description?: string; dueDate?: string | null }) => Promise<Goal>
+    updateGoal: (id: string, data: { title?: string; description?: string }) => Promise<Goal>
     archiveGoal: (id: string) => Promise<void>
+    restoreGoal: (id: string) => Promise<Goal>
     createTask: (data: { areaId: string; goalId?: string | null; title: string; notes?: string }) => Promise<Task>
     updateTask: (id: string, patch: Partial<Task> & { areaId?: string; goalId?: string | null }) => Promise<{ task: Task; unlocked: Achievement[] }>
+    reorderTasks: (items: Array<{ id: string; sortOrder: number }>) => Promise<void>
+    deleteTask: (id: string) => Promise<void>
+    restoreTask: (id: string) => Promise<Task>
+    reopenTask: (id: string) => Promise<Task>
+    manualComplete: (id: string) => Promise<{ xpAwarded: number; alreadyAwarded: boolean }>
   }
   session: {
     active: () => Promise<FocusSession | null>
@@ -343,7 +357,11 @@ export interface GrowthArcApi {
     heartbeat: (id: string) => Promise<FocusSession | null>
     pause: (id: string) => Promise<FocusSession | null>
     resume: (id: string) => Promise<FocusSession | null>
-    stop: (id: string, data: { outcome: string; blocker: string; nextStep: string; taskCompleted: boolean }) => Promise<{ session: FocusSession; xpAwarded: number; unlocked: Achievement[]; expedition: ExpeditionResult }>
+    stop: (id: string, data: { outcome: string; blocker: string; nextStep: string; taskCompleted: boolean; contributedTaskIds?: string[] }) => Promise<{
+      session: FocusSession; xpAwarded: number; unlocked: Achievement[]; expedition: ExpeditionResult
+      primaryTask: { taskId: string | null; completed: boolean; xpAwarded: number; alreadyAwarded: boolean }
+      contributedTasks: Array<{ taskId: string; title: string; completed: boolean; xpAwarded: number; alreadyAwarded: boolean }>
+    }>
     cancel: (id: string) => Promise<null>
   }
   companions: {

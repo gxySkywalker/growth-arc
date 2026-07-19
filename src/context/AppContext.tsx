@@ -25,9 +25,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
   const notify = useCallback((message: string, tone: Toast['tone'] = 'info') => {
-    const id = Date.now() + Math.random()
-    setToasts((items) => [...items, { id, message, tone }])
-    window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600)
+    setToasts((items) => {
+      if (items.some(t => t.message === message)) return items // dedup same message
+      const id = Date.now() + Math.random()
+      const next = [...items, { id, message, tone }]
+      window.setTimeout(() => setToasts((prev) => prev.filter((item) => item.id !== id)), 3600)
+      return next
+    })
   }, [])
 
   const refresh = useCallback(async () => {
