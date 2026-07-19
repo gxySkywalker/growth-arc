@@ -247,4 +247,141 @@ describe('local learning database', () => {
     const dash3 = database.getDashboard()
     expect(dash3.nextTasks[0]?.id).toBe(t3.id)
   })
+
+  it('persists reason=short_session for contributed tasks under 5 minutes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reason-short-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const contributedTask = database.createTask({ areaId: area.id, title: '刻板' })
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '短测试' })
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [contributedTask.id] })
+    expect(result.contributedTasks).toHaveLength(1)
+    expect(result.contributedTasks[0].reason).toBe('short_session')
+    expect(result.contributedTasks[0].xpAwarded).toBe(0)
+    const links = database.getContributedTasks(session.id)
+    expect(links).toHaveLength(1)
+    expect(links[0].reason).toBe('short_session')
+    expect(links[0].xp_awarded).toBe(0)
+  })
+
+  it('persists reason=awarded with XP for contributed tasks over 5 minutes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reason-awarded-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const contributedTask = database.createTask({ areaId: area.id, title: '长测试' })
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '长测试' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 60 * 60 * 1000, session.id])
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [contributedTask.id] })
+    expect(result.contributedTasks).toHaveLength(1)
+    expect(result.contributedTasks[0].reason).toBe('awarded')
+    expect(result.contributedTasks[0].xpAwarded).toBeGreaterThan(0)
+    const links = database.getContributedTasks(session.id)
+    expect(links).toHaveLength(1)
+    expect(links[0].reason).toBe('awarded')
+    expect(links[0].xp_awarded).toBeGreaterThan(0)
+  })
+
+  it('persists reason=already_awarded for tasks that already received completion XP', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reason-already-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const task = database.createTask({ areaId: area.id, title: '已领过' })
+    database.run('UPDATE tasks SET completion_xp_awarded = 1 WHERE id = ?', [task.id])
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '重领测试' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 60 * 60 * 1000, session.id])
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [task.id] })
+    expect(result.contributedTasks).toHaveLength(1)
+    expect(result.contributedTasks[0].reason).toBe('already_awarded')
+    expect(result.contributedTasks[0].xpAwarded).toBe(0)
+    const links = database.getContributedTasks(session.id)
+    expect(links).toHaveLength(1)
+    expect(links[0].reason).toBe('already_awarded')
+  })
+
+  it('persists reason=xp_cap_reached when contributed XP cap is hit', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reason-cap-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    // Create 6 tasks — first 5 fill (10+8+6+4+2=30), 6th hits cap
+    const tasks = []
+    for (let i = 0; i < 6; i++) {
+      tasks.push(database.createTask({ areaId: area.id, title: `CapTest${i}` }))
+    }
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '上限测试' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 60 * 60 * 1000, session.id])
+    const result = database.stopSession(session.id, {
+      outcome: '', taskCompleted: false,
+      contributedTaskIds: tasks.map(t => t.id),
+    })
+    // First task gets 10 XP (awarded), last (6th) should be xp_cap_reached at 0 XP
+    const last = result.contributedTasks[result.contributedTasks.length - 1]
+    expect(last.reason).toBe('xp_cap_reached')
+    expect(last.xpAwarded).toBe(0)
+    // Verify in DB
+    const links = database.getContributedTasks(session.id)
+    const lastLink = links[links.length - 1]
+    expect(lastLink.reason).toBe('xp_cap_reached')
+  })
+
+  it('keeps correct reason on repeat stop (UPSERT idempotency)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-upsert-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const task = database.createTask({ areaId: area.id, title: '幂等测试' })
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '幂等' })
+    // First stop: short session → short_session
+    const r1 = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [task.id] })
+    expect(r1.contributedTasks[0].reason).toBe('short_session')
+    // Simulate repeat: reset session status and re-stop
+    database.run("UPDATE focus_sessions SET status = 'paused' WHERE id = ?", [session.id])
+    database.run('DELETE FROM session_task_links WHERE session_id = ?', [session.id])
+    database.run("UPDATE tasks SET status = 'todo', completion_xp_awarded = 0, completed_at = NULL WHERE id = ?", [task.id])
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 60 * 60 * 1000, session.id])
+    const r2 = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [task.id] })
+    // Second stop with long session: now awarded
+    expect(r2.contributedTasks[0].reason).toBe('awarded')
+    expect(r2.contributedTasks[0].xpAwarded).toBeGreaterThan(0)
+    // Verify DB has updated reason (not stale 'short_session')
+    const links = database.getContributedTasks(session.id)
+    expect(links).toHaveLength(1)
+    expect(links[0].reason).toBe('awarded')
+  })
+
+  it('migration adding reason column is idempotent', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-migrate-reason-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    // Second init (mimics migration re-run)
+    await database.init()
+    const cols = database.all("PRAGMA table_info(session_task_links)")
+    const reasonCol = cols.find((c: { name: string }) => c.name === 'reason')
+    expect(reasonCol).toBeTruthy()
+  })
+
+  it('getContributedTasks returns reason alongside xp_awarded', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-contrib-read-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const t1 = database.createTask({ areaId: area.id, title: 'ReadTest1' })
+    const t2 = database.createTask({ areaId: area.id, title: 'ReadTest2' })
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '读取测试' })
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false, contributedTaskIds: [t1.id, t2.id] })
+    expect(result.contributedTasks).toHaveLength(2)
+    const links = database.getContributedTasks(session.id)
+    expect(links).toHaveLength(2)
+    for (const link of links) {
+      expect(link).toHaveProperty('task_id')
+      expect(link).toHaveProperty('xp_awarded')
+      expect(link).toHaveProperty('reason')
+      expect(link).toHaveProperty('title')
+      expect(link).toHaveProperty('selection_order')
+      expect(typeof link.reason).toBe('string')
+    }
+  })
 })
