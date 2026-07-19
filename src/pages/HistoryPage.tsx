@@ -28,6 +28,16 @@ function warmAreaColor(hex?: string | null) {
   return WARM_PALETTE[Math.abs(hash) % WARM_PALETTE.length]
 }
 
+function contributedLabel(ct: { xp_awarded: number; reason?: string }) {
+  if (ct.reason === 'awarded' && ct.xp_awarded > 0) return `已完成 · +${ct.xp_awarded} XP`
+  if (ct.reason === 'already_awarded') return '已完成 · 已有记录'
+  if (ct.reason === 'short_session') return '已完成 · 行程较短'
+  if (ct.reason === 'xp_cap_reached') return '已完成 · 沿途收获已满'
+  // 旧数据 reason='' 回退：有 XP 显示 XP，无 XP 显示中性文本
+  if (ct.xp_awarded > 0) return `已完成 · +${ct.xp_awarded} XP`
+  return '已记录完成'
+}
+
 function DropsRow({ drops, max = 3 }: { drops: ExpeditionResult['drops']; max?: number }) {
   const visible = drops.slice(0, max)
   const rest = drops.length - max
@@ -65,7 +75,7 @@ export function HistoryPage() {
     <header className="page-heading">
       <div><span className="eyebrow">CHRONICLE</span><h1>旅途编年史</h1><p>记录你真正走过的每一段路。每次远征自动成档，安静留在这里。</p></div>
       <select className="filter-select" value={area} onChange={(e) => setArea(e.target.value)}>
-        <option value="all">全部领域</option>
+        <option value="all">全部方向</option>
         {structure?.areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
       </select>
     </header>
@@ -139,7 +149,7 @@ export function HistoryPage() {
                     </div>}
                     {(session.contributedTasks?.length || 0) > 0 && <div className="chronicle-contrib">
                       <b>沿途抵达</b>
-                      {session.contributedTasks!.map(ct => <span key={ct.task_id} className="chronicle-contrib-item">{ct.title}{ct.xp_awarded > 0 ? ` · +${ct.xp_awarded} XP` : ' · 已记录完成'}</span>)}
+                      {session.contributedTasks!.map(ct => <span key={ct.task_id} className="chronicle-contrib-item">{ct.title} · {contributedLabel(ct)}</span>)}
                     </div>}
                     {ex.drops.length > 0 && <div className="chronicle-items">
                       <b>带回物品</b>
@@ -160,8 +170,8 @@ export function HistoryPage() {
                     <div className="chronicle-archive-heading">完整档案</div>
                     <div className="chronicle-archive-meta">
                       <span>计划 {Math.round(Number(session.planned_seconds || 1500) / 60)} 分钟</span>
-                      <span>实际 {Math.round(Number(session.active_seconds) / 60)} 分钟</span>
-                      <span>完成率 {Math.round(Number(session.active_seconds) / Math.max(1, Number(session.planned_seconds || 1500)) * 100)}%</span>
+                      <span>实际专注 {formatDuration(session.active_seconds)}</span>
+                      {session.task_completed ? <span>已抵达路标</span> : null}
                     </div>
                     {(session.blocker || session.next_step) && <div className="chronicle-archive-section">
                       {session.blocker && <p><b>困难</b>{session.blocker}</p>}
@@ -178,8 +188,8 @@ export function HistoryPage() {
                       </div>
                     </div>}
                     {hasContributed && <div className="chronicle-archive-section">
-                      <b>沿途抵达 · {session.contributedTasks!.length} 枚</b>
-                      {session.contributedTasks!.map(ct => <p key={ct.task_id}>{ct.title}{ct.xp_awarded > 0 ? ` · +${ct.xp_awarded} XP` : ' · 已记录完成'}</p>)}
+                      <b>沿途抵达 · {session.contributedTasks!.length} 处</b>
+                      {session.contributedTasks!.map(ct => <p key={ct.task_id}>{ct.title} · {contributedLabel(ct)}</p>)}
                     </div>}
                     {hasNewCompanion && <div className="chronicle-archive-section chronicle-new-companion">
                       <PixelCompanion companion={ex!.newCompanion} size="medium" />

@@ -6,13 +6,16 @@
 .planner-sidebar{min-height:540px;padding:15px;background:linear-gradient(90deg,rgba(116,78,46,.045) 1px,transparent 1px) 0 0/16px 16px,#ead8b7}
 .planner-sidebar .section-heading{margin:0 0 12px;padding:2px 1px 13px}.planner-sidebar .section-heading h2{margin:2px 0 0;font-size:19px}
 
+.cartography-sidebar .section-heading{display:flex;align-items:center;justify-content:space-between;white-space:nowrap;padding-bottom:10px}
+
 .area-nav{display:flex;flex-direction:column;gap:6px}
-.area-nav button{width:100%;min-height:46px;padding:0 10px;display:grid;grid-template-columns:13px minmax(0,1fr) auto;gap:9px;align-items:center;color:#654833;background:rgba(255,248,226,.36);border:1px solid rgba(105,72,47,.24);text-align:left;cursor:pointer}
+.area-nav button{width:100%;min-height:46px;padding:0 10px;display:grid;grid-template-columns:13px minmax(0,1fr) auto;gap:9px;align-items:center;color:#5a3a25;background:#faf3e4;border:1px solid rgba(105,72,47,.15);text-align:left;cursor:pointer}
 .area-nav button:hover{background:#f3e5c8;border-color:#9e7049}
-.area-nav button.active{color:#fff0cf;background:#5d3b29;border-color:#2f1c13;box-shadow:inset 3px 0 #d99a57,inset 0 0 0 1px #86593a}
+.area-nav button.active{color:#5a3a25;font-weight:700;background:#f3e3c2;border-color:#c9783d;border-left:3px solid #c9783d;padding-left:8px}
+.area-nav button.active:hover{background:#f3e3c2;border-color:#c9783d}
 .area-nav button i{width:10px;height:10px;border:2px solid rgba(47,28,18,.46);transform:rotate(45deg)}
-.area-nav button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.area-nav button b{min-width:22px;padding:2px 5px;color:inherit;background:rgba(255,242,211,.18);border:1px solid currentColor;text-align:center;font-size:10px}
+.area-nav button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.area-nav button b{flex-shrink:0;color:var(--muted);font-size:11px}
 
 .planner-main{position:relative;min-height:540px;overflow:hidden;padding:22px 24px 24px;background:radial-gradient(circle at 78% 22%,rgba(112,78,45,.27) 0 3px,transparent 4px),radial-gradient(circle at 33% 74%,rgba(112,78,45,.22) 0 3px,transparent 4px),linear-gradient(25deg,transparent 49.7%,rgba(118,82,47,.08) 50%,transparent 50.3%),linear-gradient(115deg,transparent 49.7%,rgba(118,82,47,.07) 50%,transparent 50.3%),#f1e2c3}
 .planner-main::before{content:'';position:absolute;inset:13px;pointer-events:none;border:1px solid rgba(104,70,43,.18);box-shadow:inset 0 0 38px rgba(114,75,42,.08)}
