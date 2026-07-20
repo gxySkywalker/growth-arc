@@ -11,11 +11,26 @@ const {
   localDateKey,
   dayBounds,
   weekBounds,
+  getReturnKind,
+  countSessionTypes,
+  getDailyPeriod,
+  getWeeklyPeriod,
+  previousWeeklyPeriod,
+  generateLocalLetterSubject,
+  generateDailyTemplate,
+  generateWeeklyTemplate,
+  buildDailyLetterFacts,
+  buildWeeklyLetterFacts,
+  buildDailyStatsForFacts,
+  buildWeeklyStatsForFacts,
+  shouldGenerateDailyLetter,
+  shouldGenerateWeeklyLetter,
 } = require('./domain.cjs')
 const {
   COMPANION_SPECIES,
   LOOT,
   rollExpedition,
+  rollLightweightExpedition,
   companionStage,
   evolutionReady,
 } = require('./game.cjs')
@@ -268,6 +283,31 @@ class StudyDatabase {
     const linkCols = new Set(this.all('PRAGMA table_info(session_task_links)').map((c) => c.name))
     if (!linkCols.has('selection_order')) this.db.run('ALTER TABLE session_task_links ADD COLUMN selection_order INTEGER NOT NULL DEFAULT 0')
     if (!linkCols.has('reason')) this.db.run("ALTER TABLE session_task_links ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
+    this.db.run(`CREATE TABLE IF NOT EXISTS letters (
+      id TEXT PRIMARY KEY,
+      letter_type TEXT NOT NULL,
+      period_key TEXT NOT NULL,
+      period_start INTEGER NOT NULL,
+      period_end INTEGER NOT NULL,
+      timezone_offset_minutes INTEGER NOT NULL,
+      timezone_name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      fact_json TEXT NOT NULL,
+      template_body TEXT NOT NULL,
+      ai_body TEXT,
+      body_source TEXT NOT NULL DEFAULT 'template',
+      is_read INTEGER NOT NULL DEFAULT 0,
+      read_at INTEGER,
+      reply_text TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      generation_version INTEGER NOT NULL DEFAULT 1,
+      ai_status TEXT,
+      UNIQUE(letter_type, period_key)
+    )`)
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_letters_period ON letters(letter_type, period_start)')
+    this.db.run('DROP INDEX IF EXISTS idx_letters_unread')
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_letters_unread ON letters(created_at DESC) WHERE is_read = 0')
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_world_nodes_region ON world_nodes(region_id, sort_order);
       CREATE INDEX IF NOT EXISTS idx_world_edges_nodes ON world_edges(from_node_id, to_node_id);
@@ -861,16 +901,32 @@ class StudyDatabase {
         this.run("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?", [now, now, tid], false)
         contributedResults.push(result)
       })
-      expedition = this.createExpeditionReward({
-        sessionId: id,
-        activeSeconds,
-        companionId: session.companion_id,
-        content: session.content,
-        outcome,
-        blocker,
-        nextStep,
-        createdAt: now,
-      })
+      const returnKind = getReturnKind(activeSeconds)
+      const skipEconomicRewards = returnKind === 'brief' || returnKind === 'short'
+      if (skipEconomicRewards) {
+        expedition = this.createLightweightExpedition({
+          sessionId: id,
+          activeSeconds,
+          returnKind,
+          companionId: session.companion_id,
+          content: session.content,
+          outcome,
+          blocker,
+          nextStep,
+          createdAt: now,
+        })
+      } else {
+        expedition = this.createExpeditionReward({
+          sessionId: id,
+          activeSeconds,
+          companionId: session.companion_id,
+          content: session.content,
+          outcome,
+          blocker,
+          nextStep,
+          createdAt: now,
+        })
+      }
     })
     const unlocked = this.checkAchievements()
     return {
@@ -968,13 +1024,78 @@ class StudyDatabase {
       ], false)
       knowledgeRelic = this.one('SELECT * FROM knowledge_relics WHERE id = ?', [relicId])
     }
-    return { sessionId, location: rolled.location, event: rolled.event, ...rewards, knowledgeRelic }
+    return { sessionId, location: rolled.location, event: rolled.event, ...rewards, knowledgeRelic, returnKind: getReturnKind(activeSeconds) }
+  }
+
+  // Lightweight expedition for brief/short — no economic rewards, no pity, narrative only.
+  // Knowledge relic is created only if outcome is non-empty AND returnKind is at least 'short'.
+  // Completed expedition record ≠ formal expedition; formal threshold is active_seconds >= 300.
+  createLightweightExpedition({ sessionId, activeSeconds, returnKind, companionId, content, outcome, blocker, nextStep, createdAt }) {
+    const existing = this.getExpedition(sessionId)
+    if (existing) return { ...existing, returnKind: getReturnKind(activeSeconds) }
+
+    const rolled = rollLightweightExpedition({ sessionId, activeSeconds, returnKind })
+
+    let activeCompanion = null
+    if (companionId) {
+      activeCompanion = this.getCompanion(companionId)
+    }
+
+    const row = {
+      tier: rolled.tier,
+      location: rolled.location,
+      event: rolled.event,
+      drops: rolled.drops,
+      rareFound: rolled.rareFound,
+      rareChance: rolled.rareChance,
+      companionChance: rolled.companionChance,
+      bondXp: rolled.bondXp,
+      activeCompanion,
+      newCompanion: null,
+    }
+
+    this.run(`INSERT INTO expeditions (session_id, tier_id, location, event_text, rewards_json, rare_found, companion_found_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+      sessionId,
+      rolled.tier.id,
+      rolled.location,
+      rolled.event,
+      JSON.stringify(row),
+      rolled.rareFound ? 1 : 0,
+      null,
+      createdAt,
+    ], false)
+
+    let knowledgeRelic = null
+    const cleanOutcome = String(outcome || '').trim()
+    if (cleanOutcome && returnKind !== 'brief') {
+      const relicId = crypto.randomUUID()
+      this.run(`INSERT INTO knowledge_relics (id, session_id, title, content, question, next_step, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        relicId,
+        sessionId,
+        String(content || '本次远征').trim(),
+        cleanOutcome,
+        String(blocker || '').trim(),
+        String(nextStep || '').trim(),
+        createdAt,
+      ], false)
+      knowledgeRelic = this.one('SELECT * FROM knowledge_relics WHERE id = ?', [relicId])
+    }
+
+    return { sessionId, location: rolled.location, event: rolled.event, ...row, knowledgeRelic, returnKind }
   }
 
   getExpedition(sessionId) {
     const row = this.one('SELECT * FROM expeditions WHERE session_id = ?', [sessionId])
     if (!row) return null
     const rewards = JSON.parse(row.rewards_json)
+    // Derive returnKind for legacy records; prefer stored value, fall back to active_seconds.
+    let returnKind = rewards.returnKind
+    if (!returnKind) {
+      const session = this.one('SELECT active_seconds FROM focus_sessions WHERE id = ?', [sessionId])
+      returnKind = session ? getReturnKind(Number(session.active_seconds) || 0) : 'expedition'
+    }
     return {
       sessionId: row.session_id,
       tier: rewards.tier,
@@ -989,6 +1110,7 @@ class StudyDatabase {
       newCompanion: rewards.newCompanion,
       knowledgeRelic: this.one('SELECT * FROM knowledge_relics WHERE session_id = ?', [sessionId]),
       createdAt: row.created_at,
+      returnKind,
     }
   }
 
@@ -1241,6 +1363,230 @@ class StudyDatabase {
       activeDays: activeDays.size,
       byArea: [...byArea.values()].sort((a, b) => b.seconds - a.seconds),
     }
+  }
+
+  // Completed-only statistics for observatory and letter facts.
+  // Running/paused sessions are excluded; use getDashboard() for live overlay.
+  getCompletedStats(start, end) {
+    const sessions = this.all(
+      "SELECT s.active_seconds, s.area_id, a.name AS area_name, a.color AS area_color FROM focus_sessions s LEFT JOIN areas a ON a.id = s.area_id WHERE s.status = 'completed' AND s.ended_at >= ? AND s.ended_at < ?",
+      [start, end],
+    )
+    const totalActiveSeconds = sessions.reduce((sum, s) => sum + Number(s.active_seconds || 0), 0)
+    const sessionCounts = countSessionTypes(sessions)
+    const completedTaskCount = Number(this.one(
+      "SELECT COUNT(*) AS count FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ?",
+      [start, end],
+    ).count)
+    const byArea = new Map()
+    for (const s of sessions) {
+      if (!s.area_id) continue
+      const key = s.area_id
+      const existing = byArea.get(key) || { id: key, name: s.area_name || key, color: s.area_color || '', seconds: 0 }
+      existing.seconds += Number(s.active_seconds || 0)
+      byArea.set(key, existing)
+    }
+    const maxSession = sessions.reduce((m, s) => Math.max(m, Number(s.active_seconds || 0)), 0)
+    return {
+      totalActiveSeconds,
+      sessionCounts,
+      completedTaskCount,
+      directionBreakdown: [...byArea.values()].sort((a, b) => b.seconds - a.seconds),
+      longestSessionSeconds: maxSession,
+    }
+  }
+
+  // ── Letters CRUD (phase 2A) ──────────────────────────────
+
+  createLetter({ id, letterType, periodKey, periodStart, periodEnd, timezoneOffsetMinutes, timezoneName, subject, fact, templateBody }) {
+    if (!id) throw new Error('信件 id 不能为空')
+    if (!['daily', 'weekly'].includes(letterType)) throw new Error('letter_type 只允许 daily 或 weekly')
+    if (!String(subject || '').trim()) throw new Error('信件标题不能为空')
+    if (!String(timezoneName || '').trim()) throw new Error('时区名称不能为空')
+    if (!String(templateBody || '').trim()) throw new Error('信件正文不能为空')
+    if (periodEnd <= periodStart) throw new Error('period_end 必须大于 period_start')
+    let factJson
+    try { factJson = JSON.stringify(fact) } catch (_) { throw new Error('fact 无法序列化') }
+    const existing = this.one('SELECT id FROM letters WHERE letter_type = ? AND period_key = ?', [letterType, periodKey])
+    if (existing) { const err = new Error('相同周期的信件已存在'); err.code = 'LETTER_PERIOD_EXISTS'; throw err }
+    const now = Date.now()
+    try {
+      this.transaction(() => {
+        this.run(`INSERT INTO letters (id, letter_type, period_key, period_start, period_end, timezone_offset_minutes, timezone_name, subject, fact_json, template_body, ai_body, body_source, is_read, read_at, reply_text, created_at, updated_at, generation_version, ai_status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'template', 0, NULL, NULL, ?, ?, 1, NULL)`, [
+          id, letterType, periodKey, periodStart, periodEnd, timezoneOffsetMinutes, timezoneName,
+          subject.trim(), factJson, templateBody.trim(),
+          now, now,
+        ], false)
+      })
+    } catch (e) {
+      if (e.message && e.message.includes('UNIQUE constraint failed')) {
+        const err = new Error('相同周期的信件已存在'); err.code = 'LETTER_PERIOD_EXISTS'; throw err
+      }
+      throw e
+    }
+    return this.getLetterById(id)
+  }
+
+  getLetterById(id) {
+    const row = this.one('SELECT * FROM letters WHERE id = ?', [id])
+    if (!row) return null
+    return { ...row, fact: JSON.parse(row.fact_json) }
+  }
+
+  listLetters({ limit = 50, unreadOnly = false, letterType, cursorBefore } = {}) {
+    const clauses = []
+    const params = []
+    if (unreadOnly) { clauses.push('is_read = 0'); }
+    if (letterType) { clauses.push('letter_type = ?'); params.push(letterType); }
+    if (cursorBefore !== undefined) { clauses.push('(created_at < ? OR (created_at = ? AND id < ?))'); params.push(cursorBefore, cursorBefore, cursorBefore); }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+    const take = Math.max(1, Math.min(Number(limit) || 50, 200))
+    const rows = this.all(`SELECT * FROM letters ${where} ORDER BY created_at DESC, id DESC LIMIT ?`, [...params, take])
+    return rows.map(row => ({ ...row, fact: JSON.parse(row.fact_json) }))
+  }
+
+  getUnreadLetterCount() {
+    return Number(this.one('SELECT COUNT(*) AS count FROM letters WHERE is_read = 0').count)
+  }
+
+  getLatestUnreadLetter() {
+    const row = this.one("SELECT * FROM letters WHERE is_read = 0 ORDER BY created_at DESC LIMIT 1")
+    if (!row) return null
+    return { ...row, fact: JSON.parse(row.fact_json) }
+  }
+
+  markLetterRead(id) {
+    const letter = this.one('SELECT is_read FROM letters WHERE id = ?', [id])
+    if (!letter) throw new Error('信件不存在')
+    if (letter.is_read) return this.getLetterById(id)
+    const now = Date.now()
+    this.run('UPDATE letters SET is_read = 1, read_at = ?, updated_at = ? WHERE id = ?', [now, now, id])
+    return this.getLetterById(id)
+  }
+
+  markLetterUnread(id) {
+    const letter = this.one('SELECT is_read FROM letters WHERE id = ?', [id])
+    if (!letter) throw new Error('信件不存在')
+    if (!letter.is_read) return this.getLetterById(id)
+    this.run('UPDATE letters SET is_read = 0, read_at = NULL, updated_at = ? WHERE id = ?', [Date.now(), id])
+    return this.getLetterById(id)
+  }
+
+  saveLetterReply(id, replyText) {
+    const letter = this.one('SELECT id FROM letters WHERE id = ?', [id])
+    if (!letter) throw new Error('信件不存在')
+    const trimmed = String(replyText || '').trim()
+    if (trimmed.length > 500) throw new Error('回信不能超过 500 个字符')
+    this.run('UPDATE letters SET reply_text = ?, updated_at = ? WHERE id = ?', [trimmed || null, Date.now(), id])
+    return this.getLetterById(id)
+  }
+
+  // ── Periodic letter generation ──────────────────────────────
+
+  ensureLetterForPeriod({ letterType, period }) {
+    const existing = this.one('SELECT * FROM letters WHERE letter_type = ? AND period_key = ?', [letterType, period.periodKey])
+    if (existing) return { letter: { ...existing, fact: JSON.parse(existing.fact_json) }, created: false }
+
+    const facts = letterType === 'daily'
+      ? buildDailyStatsForFacts(this, period)
+      : buildWeeklyStatsForFacts(this, period)
+
+    const shouldGen = letterType === 'daily'
+      ? shouldGenerateDailyLetter(facts)
+      : shouldGenerateWeeklyLetter(facts)
+
+    if (!shouldGen) return { letter: null, created: false, skipped: true }
+
+    const seed = `${letterType}:${period.periodKey}:1`
+    const subject = generateLocalLetterSubject(letterType, facts, seed)
+    const factObj = letterType === 'daily'
+      ? buildDailyLetterFacts(facts, period)
+      : buildWeeklyLetterFacts(facts, period, letterType === 'weekly' ? (() => {
+          const prev = previousWeeklyPeriod(period.periodStart)
+          return this.getCompletedStats(prev.periodStart, prev.periodEnd).totalActiveSeconds
+        })() : undefined)
+    const templateBody = letterType === 'daily'
+      ? generateDailyTemplate(factObj, seed)
+      : generateWeeklyTemplate(factObj, seed)
+
+    try {
+      this.createLetter({
+        id: crypto.randomUUID(),
+        letterType,
+        periodKey: period.periodKey,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        timezoneOffsetMinutes: period.timezoneOffsetMinutes,
+        timezoneName: period.timezoneName,
+        subject,
+        fact: factObj,
+        templateBody,
+      })
+      return { letter: this.getLetterById(this.one('SELECT id FROM letters WHERE letter_type = ? AND period_key = ?', [letterType, period.periodKey]).id), created: true }
+    } catch (e) {
+      if (e.code === 'LETTER_PERIOD_EXISTS') {
+        const row = this.one('SELECT * FROM letters WHERE letter_type = ? AND period_key = ?', [letterType, period.periodKey])
+        return { letter: { ...row, fact: JSON.parse(row.fact_json) }, created: false }
+      }
+      throw e
+    }
+  }
+
+  ensurePeriodicLetters(now = Date.now()) {
+    const s = this.getSettings()
+    const mailStarted = Number(s.mail_started_at_ms) || 0
+    const lastDaily = s.last_daily_period_checked || ''
+    const lastWeekly = s.last_weekly_period_checked || ''
+
+    const d = getDailyPeriod(now)
+    const w = getWeeklyPeriod(now)
+    const DAY = 86400000
+
+    const result = {
+      initialized: !mailStarted,
+      daily: { checked: 0, created: 0, skipped: 0, existing: 0 },
+      weekly: { checked: 0, created: 0, skipped: 0, existing: 0 },
+    }
+
+    if (!mailStarted) {
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('mail_started_at_ms', ?)", [String(now)])
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [d.periodKey])
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [w.periodKey])
+      return result
+    }
+
+    // Daily check — from OLDEST to newest, max 30 days
+    const dailyStart = Math.max(mailStarted, now - 30 * DAY)
+    let cursor = dailyStart
+    while (cursor < d.periodStart) {
+      const p = getDailyPeriod(cursor)
+      if (p.periodKey <= lastDaily) { cursor = p.periodEnd; continue }
+      result.daily.checked++
+      const r = this.ensureLetterForPeriod({ letterType: 'daily', period: p })
+      if (r.created) result.daily.created++
+      else if (r.skipped) result.daily.skipped++
+      else result.daily.existing++
+      cursor = p.periodEnd
+    }
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [d.periodKey])
+
+    // Weekly check — need full week completed
+    const weeklyStart = Math.max(mailStarted, now - 30 * DAY)
+    let wCursor = weeklyStart
+    while (wCursor < w.periodStart) {
+      const pw = getWeeklyPeriod(wCursor)
+      if (pw.periodKey <= lastWeekly) { wCursor = pw.periodEnd; continue }
+      result.weekly.checked++
+      const r = this.ensureLetterForPeriod({ letterType: 'weekly', period: pw })
+      if (r.created) result.weekly.created++
+      else if (r.skipped) result.weekly.skipped++
+      else result.weekly.existing++
+      wCursor = pw.periodEnd
+    }
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [w.periodKey])
+
+    return result
   }
 
   getDashboard() {

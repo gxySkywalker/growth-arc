@@ -44,3 +44,12 @@
 .empty-return-confirm-message{margin:0;font-size:15px;color:var(--ink)}
 .empty-return-confirm-detail{margin:8px 0 0;color:var(--muted);font-size:14px}
 .empty-return-confirm-footer{justify-content:flex-end;gap:10px}
+.return-brief-card{width:min(480px,calc(100vw - 48px));display:flex;flex-direction:column;max-height:min(520px,calc(100vh - 48px));overflow:hidden}
+.return-brief-body{padding:16px 24px 8px;text-align:center}
+.return-brief-hero{margin:0 0 10px;display:flex;justify-content:center}
+.return-brief-anchor{width:48px;height:48px;display:grid;place-items:center;color:var(--muted);opacity:.5}
+.return-brief-location{margin:0 0 4px;color:var(--ink);font-size:17px;font-weight:700}
+.return-brief-event{margin:0 0 10px;color:#6b4d35;font-size:14px;line-height:1.55}
+.return-brief-duration{margin:0 0 8px;color:var(--muted);font-size:13px}
+.return-brief-task{margin:0 0 4px;color:var(--muted);font-size:12px}
+.return-brief-relic{margin:10px 0 0;text-align:left}

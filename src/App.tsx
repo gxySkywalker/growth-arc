@@ -8,6 +8,8 @@ import { CottagePage } from './pages/CottagePage'
 import { PlanPage } from './pages/PlanPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { ReviewPage } from './pages/ReviewPage'
+import { ObservatoryPage } from './pages/ObservatoryPage'
+import { PostOfficePage } from './pages/PostOfficePage'
 import { GrowthPage } from './pages/GrowthPage'
 import { SettingsPage } from './pages/SettingsPage'
 import type { PageId } from './types'
@@ -18,7 +20,8 @@ const NAV: Array<{ id: PageId; label: string; icon: string }> = [
   { id: 'plan', label: '制图室', icon: 'plan' },
   { id: 'growth', label: '伙伴营地', icon: 'growth' },
   { id: 'history', label: '旅途编年史', icon: 'history' },
-  { id: 'review', label: '天使来信', icon: 'review' },
+  { id: 'observatory', label: '天文台', icon: 'star' },
+  { id: 'mail', label: '天使邮局', icon: 'mail' },
 ]
 
 function AppShell() {
@@ -51,7 +54,9 @@ function AppShell() {
       {page === 'overview' && <HomePage onNavigate={setPage} />}
       {page === 'plan' && <PlanPage />}
       {page === 'history' && <HistoryPage />}
-      {page === 'review' && <ReviewPage />}
+      {page === 'review' && <ObservatoryPage />}
+      {page === 'observatory' && <ObservatoryPage />}
+      {page === 'mail' && <PostOfficePage onNavigate={setPage} />}
       {page === 'growth' && <GrowthPage />}
       {page === 'settings' && <SettingsPage />}
     </main>

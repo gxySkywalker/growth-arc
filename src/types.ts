@@ -1,4 +1,4 @@
-export type PageId = 'home' | 'overview' | 'plan' | 'history' | 'review' | 'growth' | 'settings'
+export type PageId = 'home' | 'overview' | 'plan' | 'history' | 'review' | 'growth' | 'settings' | 'observatory' | 'mail'
 
 export interface Area {
   id: string
@@ -233,6 +233,7 @@ export interface ExpeditionResult {
   activeCompanion: Companion | null
   newCompanion: Companion | null
   knowledgeRelic: KnowledgeRelic | null
+  returnKind?: 'brief' | 'short' | 'expedition' | 'deep'
   createdAt?: number
 }
 
@@ -389,6 +390,106 @@ export interface GrowthArcApi {
   inventory: {
     use: (itemId: string) => Promise<{ consumed: boolean; itemId: string; effect: string }>
   }
+  observatory: {
+    getDaily: (dateOrTimestamp?: number) => Promise<DailyObservatoryData>
+    getWeekly: (dateOrTimestamp?: number) => Promise<WeeklyObservatoryData>
+    getReview: (date: string) => Promise<DailyReviewData>
+    saveReview: (data: { date: string; win: string; blocker: string; energy: number | null; tomorrowTask: string }) => Promise<unknown>
+  }
+  mail: {
+    list: (opts?: { limit?: number; unreadOnly?: boolean; letterType?: 'daily' | 'weekly'; cursorBefore?: number }) => Promise<LetterListItem[]>
+    get: (id: string) => Promise<LetterDetail>
+    getUnreadCount: () => Promise<number>
+    getLatestUnread: () => Promise<{ id: string; subject: string; letterType: string; createdAt: number } | null>
+    markRead: (id: string) => Promise<{ id: string; isRead: boolean; readAt: number | null }>
+    markUnread: (id: string) => Promise<{ id: string; isRead: boolean; readAt: number | null }>
+    saveReply: (id: string, replyText: string) => Promise<{ replyText: string | null; updatedAt: number }>
+    ensurePeriodic: () => Promise<EnsurePeriodicLettersResult>
+  }
+}
+
+export interface SessionCounts {
+  brief: number
+  short: number
+  expedition: number
+  deep: number
+}
+
+export interface ObservatoryPeriod {
+  periodKey: string
+  periodStart: number
+  periodEnd: number
+  timezoneName: string
+  timezoneOffsetMinutes: number
+}
+
+export interface DailyObservatoryData {
+  period: ObservatoryPeriod
+  stats: {
+    totalActiveSeconds: number
+    sessionCounts: SessionCounts
+    completedTaskCount: number
+    directionBreakdown: Array<{ id: string; name: string; color: string; seconds: number }>
+    longestSessionSeconds: number
+  }
+  sessions: Array<{
+    id: string; title: string; activeSeconds: number; endedAt: number
+    returnKind: 'brief' | 'short' | 'expedition' | 'deep'
+    areaName: string; areaColor: string
+  }>
+  review: { win: string; blocker: string; energy: number | null; futureNote: string } | null
+  currentSession: { id: string; content: string; activeSeconds: number; status: string } | null
+  hourlyActiveSeconds: number[]
+  hourlyDistributionPrecision: 'exact' | 'estimated'
+}
+
+export interface WeeklyObservatoryData {
+  period: ObservatoryPeriod
+  stats: {
+    totalActiveSeconds: number
+    dailyActiveSeconds: number[]
+    sessionCounts: SessionCounts
+    completedTaskCount: number
+    directionBreakdown: Array<{ id: string; name: string; color: string; seconds: number }>
+    longestSessionSeconds: number
+    previousPeriodTotalSeconds: number
+  }
+  representativeTasks: Array<{ id: string; title: string }>
+  hourlyActiveSecondsByDay: number[][]
+  hourlyDistributionPrecision: 'exact' | 'estimated'
+}
+
+export interface LetterListItem {
+  id: string
+  letterType: 'daily' | 'weekly'
+  periodKey: string
+  periodStart: number
+  periodEnd: number
+  subject: string
+  bodyPreview: string
+  isRead: boolean
+  readAt: number | null
+  createdAt: number
+}
+
+export interface LetterDetail {
+  id: string
+  letterType: 'daily' | 'weekly'
+  period: ObservatoryPeriod
+  subject: string
+  body: string
+  bodySource: 'template' | 'ai'
+  factSummary: { totalActiveSeconds: number; sessionCounts: SessionCounts; completedTaskCount: number }
+  isRead: boolean
+  readAt: number | null
+  replyText: string | null
+  createdAt: number
+}
+
+export interface EnsurePeriodicLettersResult {
+  initialized: boolean
+  daily: { checked: number; created: number; skipped: number; existing: number }
+  weekly: { checked: number; created: number; skipped: number; existing: number }
 }
 
 declare global {

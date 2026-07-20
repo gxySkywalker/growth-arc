@@ -62,6 +62,22 @@ contextBridge.exposeInMainWorld('growthArc', {
   inventory: {
     use: (itemId) => invoke('inventory:use', itemId),
   },
+  observatory: {
+    getDaily: (dateOrTimestamp) => invoke('observatory:get-daily', dateOrTimestamp),
+    getWeekly: (dateOrTimestamp) => invoke('observatory:get-weekly', dateOrTimestamp),
+    getReview: (date) => invoke('observatory:get-review', date),
+    saveReview: (data) => invoke('observatory:save-review', data),
+  },
+  mail: {
+    list: (opts) => invoke('mail:list', opts),
+    get: (id) => invoke('mail:get', id),
+    getUnreadCount: () => invoke('mail:get-unread-count'),
+    getLatestUnread: () => invoke('mail:get-latest-unread'),
+    markRead: (id) => invoke('mail:mark-read', id),
+    markUnread: (id) => invoke('mail:mark-unread', id),
+    saveReply: (id, replyText) => invoke('mail:save-reply', { id, replyText }),
+    ensurePeriodic: () => invoke('mail:ensure-periodic'),
+  },
   window: {
     show: () => ipcRenderer.send('window:show'),
   },

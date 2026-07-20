@@ -1,6 +1,6 @@
 {
   "name": "growth-arc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A private, local-first learning and focus system",
   "main": "electron/main.cjs",
@@ -10,7 +10,7 @@
     "prebuild": "npm run art:validate",
     "build": "tsc -p tsconfig.app.json && vite build",
     "start": "npm run build && electron .",
-    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts src/lib/cottage-scene.test.ts",
+    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts src/lib/cottage-scene.test.ts src/lib/observatory.test.ts",
     "test:watch": "vitest",
     "art:validate": "node scripts/validate-art-assets.mjs",
     "art:prepare:cottage": "node scripts/prepare-tileset-draft.mjs",
@@ -46,6 +46,7 @@
     }
   },
   "dependencies": {
+    "echarts": "^6.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "sql.js": "^1.14.1"

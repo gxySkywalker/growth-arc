@@ -201,12 +201,53 @@ function evolutionReady(bondXp, evolutionPath = '') {
   return Number(bondXp) >= 80 && !evolutionPath
 }
 
+const BRIEF_LOCATIONS = ['小屋门前', '城镇路口', '营地附近', '旧路起点']
+const BRIEF_EVENTS = [
+  '你出门透了口气，把刚才完成的部分记下便回来了。',
+  '和伙伴走到路口。阳光正好，小屋的灯还看得见。',
+  '你在周围转了一圈，确认今天的记录都妥当了。',
+  '旧路还是记忆里的样子。你把已经完成的部分标记清楚。',
+]
+
+const SHORT_LOCATIONS = ['林间入口', '营地外缘', '城镇近郊', '旧路浅段', '松林小径']
+const SHORT_EVENTS = [
+  '你暂时停下脚步，把今天的笔记整理好。',
+  '灌木丛里开了一小片花，伙伴低头嗅了嗅。',
+  '路旁的石碑刻着模糊的字迹，像是很久以前留下的。',
+  '你们沿着旧路走了一小截。空气里带着淡淡的松脂气味。',
+  '伙伴在路口蹲下，好像在等你有空再往前走。',
+]
+
+function rollLightweightExpedition({ sessionId, activeSeconds, returnKind }) {
+  const tier = durationTier(activeSeconds)
+  const random = seededRandom(String(sessionId) + ':' + activeSeconds)
+  const locPool = returnKind === 'brief' ? BRIEF_LOCATIONS : SHORT_LOCATIONS
+  const evtPool = returnKind === 'brief' ? BRIEF_EVENTS : SHORT_EVENTS
+  return {
+    tier,
+    location: locPool[Math.floor(random() * locPool.length)],
+    event: evtPool[Math.floor(random() * evtPool.length)],
+    drops: [],
+    rareFound: false,
+    rareChance: 0,
+    companionChance: 0,
+    bondXp: 0,
+    activeCompanion: null,
+    newCompanion: null,
+  }
+}
+
 module.exports = {
   COMPANION_SPECIES,
   LOOT,
   DURATION_TIERS,
+  BRIEF_LOCATIONS,
+  BRIEF_EVENTS,
+  SHORT_LOCATIONS,
+  SHORT_EVENTS,
   durationTier,
   rollExpedition,
+  rollLightweightExpedition,
   companionStage,
   evolutionReady,
 }

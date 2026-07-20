@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { friendlyError, formatClock } from '../lib/format'
+import { friendlyError, formatClock, formatDuration } from '../lib/format'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
 import { PixelCompanion } from './PixelCompanion'
@@ -207,6 +207,7 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     completedContributed.length >= 1 &&
     completedContributed.length <= 2
   const isCompactScene = !expedition?.rareFound && !expedition?.newCompanion
+  const isLightweight = expedition?.returnKind === 'brief' || expedition?.returnKind === 'short'
   const drops = expedition?.drops ?? []
   const hasRelic = !!expedition?.knowledgeRelic
   const compactRewards = drops.length <= 2 && !expedition?.rareFound
@@ -349,7 +350,42 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
 
     {/* 远征归来结果 */}
     {expedition && (
-      <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="return-result-modal">
+      isLightweight ? (
+        <div className="modal-backdrop" onClick={() => { setExpedition(null); setStopResult(null) }}>
+          <div className="modal return-brief-card">
+            <header className="modal-header"><h2>{expedition.returnKind === 'brief' ? '短途折返' : '短程归来'}</h2><button className="icon-button" onClick={() => { setExpedition(null); setStopResult(null) }} aria-label="关闭"><Icon name="close" /></button></header>
+            <div className="modal-body return-brief-body">
+              <div className="return-brief-hero">
+                {expedition.activeCompanion ? (
+                  <PixelCompanion companion={expedition.activeCompanion} size="medium" />
+                ) : (
+                  <span className="return-brief-anchor"><Icon name="home" size={28} /></span>
+                )}
+              </div>
+              <p className="return-brief-location">{expedition.location}</p>
+              <p className="return-brief-event">{expedition.event}</p>
+              <p className="return-brief-duration">
+                {formatDuration(stopResult?.session?.active_seconds ?? 0)}
+                {expedition.returnKind === 'brief'
+                  ? ' · 已记入旅途'
+                  : showRelicContent
+                    ? ' · 知识遗物已归档'
+                    : ' · 已收入编年史'}
+              </p>
+              {stopResult?.primaryTask?.completed && (
+                <p className="return-brief-task">抵达路标 · {sessionTitle}</p>
+              )}
+              {expedition.returnKind === 'short' && showRelicContent && (
+                <div className="relic-return return-brief-relic">
+                  <span>▤</span><div><small>知识遗物已归档</small><strong>{expedition.knowledgeRelic!.title}</strong><p>{expedition.knowledgeRelic!.content}</p></div>
+                </div>
+              )}
+            </div>
+            <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>回到小屋</button></footer>
+          </div>
+        </div>
+      ) : (
+        <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="return-result-modal">
         <div className="return-result-scroll">
           <div className={`return-scene${isCompactScene ? ' return-scene-compact' : ''}`}>
             <span className="return-tier">{expedition.tier.name}</span><h2>{expedition.location}</h2><p>{expedition.event}</p>
@@ -388,7 +424,7 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
         </div>
         <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>把宝藏放回小屋</button></footer>
       </Modal>
-    )}
+    ))}
   </>
 }
 

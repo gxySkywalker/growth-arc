@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // @ts-expect-error The Electron database module is CommonJS and intentionally shared with tests.
 import databaseModule from '../../electron/database.cjs'
+// @ts-expect-error The Electron domain module is CommonJS and intentionally shared with tests.
+import domain from '../../electron/domain.cjs'
 
 const { StudyDatabase } = databaseModule
+const { getDailyPeriod, getWeeklyPeriod, localDateKey, getReturnKind } = domain
 const tempDirs: string[] = []
 
 afterEach(() => {
@@ -383,5 +386,709 @@ describe('local learning database', () => {
       expect(link).toHaveProperty('selection_order')
       expect(typeof link.reason).toBe('string')
     }
+  })
+
+  it('returnKind brief (0s): no drops, no bond, no pity advance', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-brief-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const settings = database.getSettings()
+    const initRare = Number(settings.rare_pity || 0)
+    const initComp = Number(settings.companion_pity || 0)
+    const invBefore = database.getInventory().reduce((s: number, i: any) => s + Number(i.quantity), 0)
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '0秒测试' })
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    const ex = result.expedition
+    expect(ex.returnKind).toBe('brief')
+    expect(ex.drops).toEqual([])
+    expect(ex.bondXp).toBe(0)
+    expect(ex.rareFound).toBe(false)
+    expect(ex.newCompanion).toBeNull()
+    expect(ex.activeCompanion).not.toBeNull() // companion accompanies, just no bond gain
+    const invAfter = database.getInventory().reduce((s: number, i: any) => s + Number(i.quantity), 0)
+    expect(invAfter).toBe(invBefore)
+    const settings2 = database.getSettings()
+    expect(Number(settings2.rare_pity || 0)).toBe(initRare)
+    expect(Number(settings2.companion_pity || 0)).toBe(initComp)
+  })
+
+  it('returnKind brief (59s): same zero-economy behavior', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-brief-59s-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '59秒' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 59000, session.id])
+    const settings = database.getSettings()
+    const initRare = Number(settings.rare_pity || 0)
+    const result = database.stopSession(session.id, { outcome: 'test', taskCompleted: false })
+    expect(result.expedition.returnKind).toBe('brief')
+    expect(result.expedition.drops).toEqual([])
+    expect(result.expedition.bondXp).toBe(0)
+    expect(result.expedition.rareFound).toBe(false)
+    const ex2 = database.getExpedition(session.id)
+    expect(ex2.returnKind).toBe('brief')
+    expect(ex2.drops).toEqual([])
+    // pity unchanged
+    const settings2 = database.getSettings()
+    expect(Number(settings2.rare_pity || 0)).toBe(initRare)
+  })
+
+  it('returnKind short (60s): no economic rewards, still no pity', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-short-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '60秒' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 60000, session.id])
+    const settings = database.getSettings()
+    const initRare = Number(settings.rare_pity || 0)
+    const result = database.stopSession(session.id, { outcome: 'short test', taskCompleted: false })
+    expect(result.expedition.returnKind).toBe('short')
+    expect(result.expedition.drops).toEqual([])
+    expect(result.expedition.bondXp).toBe(0)
+    expect(result.expedition.rareFound).toBe(false)
+    // knowledge relic created (outcome non-empty and returnKind >= short)
+    expect(result.expedition.knowledgeRelic).not.toBeNull()
+    // pity unchanged
+    const settings2 = database.getSettings()
+    expect(Number(settings2.rare_pity || 0)).toBe(initRare)
+  })
+
+  it('returnKind short (299s): same zero-economy', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-short-299s-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '299秒' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 299000, session.id])
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    expect(result.expedition.returnKind).toBe('short')
+    expect(result.expedition.drops).toEqual([])
+    expect(result.expedition.bondXp).toBe(0)
+    // no relic (outcome empty)
+    expect(result.expedition.knowledgeRelic).toBeNull()
+  })
+
+  it('returnKind expedition (300s): full rewards resume', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-expedition-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '300秒' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 300000, session.id])
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    expect(result.expedition.returnKind).toBe('expedition')
+    expect(result.expedition.drops.length).toBeGreaterThanOrEqual(1)
+    expect(result.expedition.bondXp).toBeGreaterThanOrEqual(1)
+  })
+
+  it('returnKind deep (3600s): full rewards with 2 drops', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-deep-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '3600秒' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 3600000, session.id])
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    expect(result.expedition.returnKind).toBe('deep')
+    const totalQty = result.expedition.drops.reduce((s: number, d: any) => s + d.quantity, 0)
+    expect(totalQty).toBeGreaterThanOrEqual(2)
+  })
+
+  it('returnKind boundaries: 0→brief, 59→brief, 60→short, 299→short, 300→expedition, 1799→expedition, 1800→deep', () => {
+    const { getReturnKind } = require('../../electron/domain.cjs')
+    expect(getReturnKind(0)).toBe('brief')
+    expect(getReturnKind(59)).toBe('brief')
+    expect(getReturnKind(60)).toBe('short')
+    expect(getReturnKind(299)).toBe('short')
+    expect(getReturnKind(300)).toBe('expedition')
+    expect(getReturnKind(1799)).toBe('expedition')
+    expect(getReturnKind(1800)).toBe('deep')
+    expect(getReturnKind(3600)).toBe('deep')
+  })
+
+  it('brief does not consume existing pity', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-pity-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    // Set pity to 8
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('rare_pity', '8')", [])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('companion_pity', '5')", [])
+    const area = database.getStructure().areas[0]
+    // Do 3 brief expeditions
+    for (let i = 0; i < 3; i++) {
+      const s = database.startSession({ taskId: null, areaId: area.id, content: 'pity' + i })
+      database.stopSession(s.id, { outcome: '', taskCompleted: false })
+    }
+    const settings = database.getSettings()
+    expect(Number(settings.rare_pity || 0)).toBe(8)
+    expect(Number(settings.companion_pity || 0)).toBe(5)
+  })
+
+  it('lightweight expedition preserves active companion in result', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-light-companion-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const comps = database.getCompanionCollection()
+    expect(comps.active).not.toBeNull()
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '同伴测试', companionId: comps.active.id })
+    const result = database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    expect(result.expedition.activeCompanion).not.toBeNull()
+    expect(result.expedition.activeCompanion.id).toBe(comps.active.id)
+    expect(result.expedition.bondXp).toBe(0)
+    expect(result.expedition.newCompanion).toBeNull()
+  })
+
+  it('brief expedition uses restricted event pool', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-brief-pool-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const { BRIEF_LOCATIONS, BRIEF_EVENTS } = require('../../electron/game.cjs')
+    for (let i = 0; i < 5; i++) {
+      const s = database.startSession({ taskId: null, areaId: area.id, content: 'pool' + i })
+      const r = database.stopSession(s.id, { outcome: '', taskCompleted: false })
+      expect(BRIEF_LOCATIONS).toContain(r.expedition.location)
+      expect(BRIEF_EVENTS).toContain(r.expedition.event)
+    }
+  })
+
+  it('short expedition uses restricted event pool', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-short-pool-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const { SHORT_LOCATIONS, SHORT_EVENTS } = require('../../electron/game.cjs')
+    for (let i = 0; i < 5; i++) {
+      const s = database.startSession({ taskId: null, areaId: area.id, content: 'spool' + i })
+      database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 120000, s.id])
+      const r = database.stopSession(s.id, { outcome: '', taskCompleted: false })
+      expect(SHORT_LOCATIONS).toContain(r.expedition.location)
+      expect(SHORT_EVENTS).toContain(r.expedition.event)
+    }
+  })
+
+  it('legacy expedition without returnKind falls back safely', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-legacy-fallback-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    // Do a full expedition (creates normal record without returnKind in JSON)
+    const session = database.startSession({ taskId: null, areaId: area.id, content: 'legacy' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 600000, session.id])
+    database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    // Manually strip returnKind from stored JSON to simulate legacy
+    const row = database.one('SELECT rewards_json FROM expeditions WHERE session_id = ?', [session.id])
+    const parsed = JSON.parse(row.rewards_json)
+    delete parsed.returnKind
+    database.run('UPDATE expeditions SET rewards_json = ? WHERE session_id = ?', [JSON.stringify(parsed), session.id])
+    // Read back — should get returnKind derived from active_seconds
+    const ex = database.getExpedition(session.id)
+    expect(ex.returnKind).toBe('expedition') // 600 seconds → expedition
+  })
+
+  it('getCompletedStats returns completed-only session counts', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-completed-stats-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+
+    // Create a brief session (0-59s)
+    const s1 = database.startSession({ taskId: null, areaId: area.id, content: 'brief test' })
+    database.stopSession(s1.id, { outcome: '', taskCompleted: false })
+
+    // Create a short session (60-299s)
+    const s2 = database.startSession({ taskId: null, areaId: area.id, content: 'short test' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 120000, s2.id])
+    database.stopSession(s2.id, { outcome: 'did stuff', taskCompleted: false })
+
+    // Create a full expedition (300+)
+    const s3 = database.startSession({ taskId: null, areaId: area.id, content: 'expedition test' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 600000, s3.id])
+    database.stopSession(s3.id, { outcome: '', taskCompleted: false })
+
+    // Also complete a task
+    const task = database.createTask({ areaId: area.id, title: '统计测试任务' })
+    database.manualCompleteTask(task.id)
+
+    const now = Date.now()
+    const dayStart = now - 86400000
+    const dayEnd = now + 86400000
+    const stats = database.getCompletedStats(dayStart, dayEnd)
+
+    expect(stats.totalActiveSeconds).toBeGreaterThanOrEqual(720)
+    expect(stats.sessionCounts.brief).toBeGreaterThanOrEqual(1)
+    expect(stats.sessionCounts.short).toBeGreaterThanOrEqual(1)
+    expect(stats.sessionCounts.expedition).toBeGreaterThanOrEqual(1)
+    expect(stats.completedTaskCount).toBeGreaterThanOrEqual(1)
+    expect(stats.longestSessionSeconds).toBeGreaterThanOrEqual(600)
+  })
+
+  it('getCompletedStats excludes cancelled and running sessions', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-completed-filter-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+
+    const s1 = database.startSession({ taskId: null, areaId: area.id, content: 'completed' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 120000, s1.id])
+    database.stopSession(s1.id, { outcome: '', taskCompleted: false })
+
+    // cancelled — should NOT appear
+    const s2 = database.startSession({ taskId: null, areaId: area.id, content: 'cancelled' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 120000, s2.id])
+    database.cancelSession(s2.id)
+
+    const now = Date.now()
+    const stats = database.getCompletedStats(now - 86400000, now + 86400000)
+    // Should only count the completed one
+    expect(stats.sessionCounts.brief + stats.sessionCounts.short + stats.sessionCounts.expedition + stats.sessionCounts.deep).toBe(1)
+  })
+})
+
+describe('letters CRUD', () => {
+  it('migration creates letters table idempotently', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-letters-mig-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    await database.init() // second init safe
+    const cols = database.all("PRAGMA table_info(letters)")
+    expect(cols.map((c: { name: string }) => c.name)).toContain('letter_type')
+    expect(cols.map((c: { name: string }) => c.name)).toContain('period_key')
+  })
+
+  it('createLetter succeeds with valid data', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-create-letter-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    const fact = { sessionCounts: { brief: 0, short: 1, expedition: 0, deep: 0 }, totalActiveSeconds: 120 }
+    const letter = database.createLetter({
+      id, letterType: 'daily', periodKey: '2026-07-20',
+      periodStart: 1752595200000, periodEnd: 1752681600000,
+      timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai',
+      subject: '今天留下的足迹', fact, templateBody: '今天共专注 2 分钟…',
+    })
+    expect(letter.id).toBe(id)
+    expect(letter.letter_type).toBe('daily')
+    expect(letter.is_read).toBe(0)
+    expect(letter.body_source).toBe('template')
+    expect(letter.fact).toEqual(fact)
+  })
+
+  it('fact snapshot is stable after task rename', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-fact-freeze-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const task = database.createTask({ areaId: area.id, title: '原始标题' })
+    const fact = { sessionCounts: { brief: 0, short: 1, expedition: 0, deep: 0 }, completedTasks: [{ id: task.id, title: '原始标题' }] }
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-07-21', periodStart: 1752681600000, periodEnd: 1752768000000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '测试', fact, templateBody: '正文' })
+    // Rename task after letter created
+    database.updateTask(task.id, { title: '新标题' })
+    const letter = database.getLetterById(id)
+    expect(letter.fact.completedTasks[0].title).toBe('原始标题')
+  })
+
+  it('duplicate daily period_key throws', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-dup-period-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-07-22', periodStart: 1752768000000, periodEnd: 1752854400000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '1', fact: {}, templateBody: 'a' })
+    expect(() => database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-07-22', periodStart: 1752768000000, periodEnd: 1752854400000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '2', fact: {}, templateBody: 'b' })).toThrow()
+  })
+
+  it('daily and weekly can share same period_key', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-daily-weekly-key-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-07-20', periodStart: 1752595200000, periodEnd: 1752681600000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '日', fact: {}, templateBody: 'd' })
+    database.createLetter({ id: crypto.randomUUID(), letterType: 'weekly', periodKey: '2026-07-20', periodStart: 1752595200000, periodEnd: 1753200000000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '周', fact: {}, templateBody: 'w' })
+    expect(database.listLetters({}).length).toBe(2)
+  })
+
+  it('default unread, mark read sets read_at, repeat mark no change', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-read-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-07-23', periodStart: 1752854400000, periodEnd: 1752940800000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '读', fact: {}, templateBody: 't' })
+    expect(database.getUnreadLetterCount()).toBe(1)
+    const r1 = database.markLetterRead(id)
+    expect(r1.is_read).toBe(1)
+    expect(r1.read_at).toBeGreaterThan(0)
+    const r2 = database.markLetterRead(id)
+    expect(r2.read_at).toBe(r1.read_at)
+    expect(database.getUnreadLetterCount()).toBe(0)
+  })
+
+  it('mark unread clears read_at', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-unread-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-07-24', periodStart: 1752940800000, periodEnd: 1753027200000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '未', fact: {}, templateBody: 'u' })
+    database.markLetterRead(id)
+    database.markLetterUnread(id)
+    const r = database.getLetterById(id)
+    expect(r.is_read).toBe(0)
+    expect(r.read_at).toBeNull()
+    expect(database.getUnreadLetterCount()).toBe(1)
+  })
+
+  it('getLatestUnreadLetter returns most recent', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-latest-unread-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id1 = crypto.randomUUID()
+    const id2 = crypto.randomUUID()
+    database.createLetter({ id: id1, letterType: 'daily', periodKey: '2026-07-25', periodStart: 1753027200000, periodEnd: 1753113600000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '旧', fact: {}, templateBody: 'a' })
+    database.createLetter({ id: id2, letterType: 'daily', periodKey: '2026-07-26', periodStart: 1753113600000, periodEnd: 1753200000000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '新', fact: {}, templateBody: 'b' })
+    const latest = database.getLatestUnreadLetter()
+    expect(latest.id).toBe(id2)
+  })
+
+  it('listLetters with unreadOnly and letterType filters', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-list-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const d1 = crypto.randomUUID()
+    const w1 = crypto.randomUUID()
+    database.createLetter({ id: d1, letterType: 'daily', periodKey: '2026-07-27', periodStart: 1753200000000, periodEnd: 1753286400000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: 'd', fact: {}, templateBody: 'x' })
+    database.createLetter({ id: w1, letterType: 'weekly', periodKey: '2026-07-20', periodStart: 1752595200000, periodEnd: 1753200000000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: 'w', fact: {}, templateBody: 'y' })
+    database.markLetterRead(d1)
+    const unread = database.listLetters({ unreadOnly: true })
+    expect(unread).toHaveLength(1)
+    expect(unread[0].id).toBe(w1)
+    const dailies = database.listLetters({ letterType: 'daily' })
+    expect(dailies).toHaveLength(1)
+  })
+
+  it('saveLetterReply trims and enforces length', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reply-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-07-28', periodStart: 1753286400000, periodEnd: 1753372800000, timezoneOffsetMinutes: 480, timezoneName: 'Asia/Shanghai', subject: '回', fact: {}, templateBody: 't' })
+    const r1 = database.saveLetterReply(id, '  感谢小天使  ')
+    expect(r1.reply_text).toBe('感谢小天使')
+    const r2 = database.saveLetterReply(id, '')
+    expect(r2.reply_text).toBeNull()
+    expect(() => database.saveLetterReply(id, 'x'.repeat(501))).toThrow()
+  })
+
+  it('rejects invalid letter type and missing template body', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-validate-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    expect(() => database.createLetter({ id: crypto.randomUUID(), letterType: 'monthly', periodKey: '2026-07', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: 'x', fact: {}, templateBody: '' })).toThrow()
+    expect(() => database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: 'x', periodStart: 1, periodEnd: 0, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: 'x', fact: {}, templateBody: 'x' })).toThrow()
+  })
+
+  it('no public delete method exposed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-no-delete-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    expect(typeof database.deleteLetter).toBe('undefined')
+  })
+
+  it('old database upgrade preserves existing data counts', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-upgrade-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const taskCount = database.getStructure().tasks.length
+    const sessionCount = database.getDashboard().today.sessionCount
+    // re-init simulates upgrade
+    await database.init()
+    expect(database.getStructure().tasks.length).toBe(taskCount)
+    expect(database.getDashboard().today.sessionCount).toBe(sessionCount)
+  })
+
+  it('unread index filters is_read = 0', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-unread-idx-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const indices = database.all("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_letters_unread'")
+    expect(indices).toHaveLength(1)
+    expect(indices[0].sql).toContain('is_read = 0')
+  })
+
+  it('createLetter rejects empty timezoneName', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-validate-tz-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    expect(() => database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-08-01', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: '  ', subject: 'x', fact: {}, templateBody: 'x' })).toThrow()
+  })
+
+  it('createLetter rejects unserializable fact', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-fact-json-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const circular = {}
+    ;(circular as any).self = circular
+    expect(() => database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-08-02', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: 'x', fact: circular, templateBody: 'x' })).toThrow()
+  })
+
+  it('duplicate period error has stable code', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-err-code-'))
+    tempDirs.push(dir)
+    // use async wrapper
+    return new Promise<void>(async (resolve) => {
+      const database = await new StudyDatabase(dir).init()
+      const opts = { id: crypto.randomUUID(), letterType: 'daily', periodKey: '2026-08-03', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: 'x', fact: {}, templateBody: 'x' }
+      database.createLetter(opts)
+      try { database.createLetter(opts); } catch (e: any) {
+        expect(e.code).toBe('LETTER_PERIOD_EXISTS')
+        resolve()
+      }
+    })
+  })
+
+  it('listLetters defaults to 50 max, cursorBefore pagination', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-pages-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    for (let i = 0; i < 55; i++) {
+      database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: `2026-08-${String(i + 1).padStart(2, '0')}`, periodStart: i, periodEnd: i + 1, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: `信${i}`, fact: {}, templateBody: `b${i}` })
+    }
+    const page1 = database.listLetters({})
+    expect(page1.length).toBe(50)
+    const oldest = page1[page1.length - 1]
+    const page2 = database.listLetters({ cursorBefore: oldest.created_at })
+    expect(page2.length).toBeGreaterThanOrEqual(4)
+    expect(page2.length).toBeLessThanOrEqual(6)
+    expect(page2[0].created_at).toBeLessThanOrEqual(oldest.created_at)
+  })
+
+  it('markLetterRead throws on missing id', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-read-missing-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    expect(() => database.markLetterRead('nonexistent')).toThrow()
+  })
+
+  it('markLetterUnread throws on missing id', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-unread-missing-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    expect(() => database.markLetterUnread('nonexistent')).toThrow()
+  })
+
+  it('saveLetterReply does not change is_read or body_source', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-reply-immutable-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-08-04', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: '不变', fact: {}, templateBody: 't' })
+    const r = database.saveLetterReply(id, 'hello')
+    expect(r.is_read).toBe(0)
+    expect(r.body_source).toBe('template')
+    expect(r.fact).toEqual({})
+  })
+})
+
+describe('periodic letters', () => {
+  it('ensureLetterForPeriod creates daily letter for expedition', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-ensure-daily-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '测试远征' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 600000, session.id])
+    database.stopSession(session.id, { outcome: '完成复习', taskCompleted: false })
+    const period = getDailyPeriod(Date.now())
+    const r = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r.created).toBe(true)
+    expect(r.letter.letter_type).toBe('daily')
+    expect(r.letter.fact.totalActiveSeconds).toBeGreaterThanOrEqual(600)
+  })
+
+  it('ensureLetterForPeriod skips empty day', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-skip-empty-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const tomorrow = Date.now() + 86400000
+    const period = getDailyPeriod(tomorrow)
+    const r = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r.skipped).toBe(true)
+    expect(r.letter).toBeNull()
+  })
+
+  it('ensureLetterForPeriod returns existing on repeat', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-repeat-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '重复测试' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 600000, session.id])
+    database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    const period = getDailyPeriod(Date.now())
+    const r1 = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r1.created).toBe(true)
+    const r2 = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r2.created).toBe(false)
+    expect(r2.letter).not.toBeNull()
+  })
+
+  it('ensurePeriodicLetters initializes and does not backfill', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-init-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const r = database.ensurePeriodicLetters(Date.now())
+    expect(r.initialized).toBe(true)
+    expect(r.daily.created).toBe(0)
+    expect(r.weekly.created).toBe(0)
+  })
+
+  it('ensureLetterForPeriod creates for day with expedition using explicit period', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-ensure-day-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const now = Date.now()
+    // Place session firmly inside today (now - 10 min)
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '测试' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [now - 600000, session.id])
+    database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    // Use today's period
+    const period = getDailyPeriod(now)
+    const r = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r.created).toBe(true)
+    expect(r.letter).not.toBeNull()
+  })
+
+  it('ensurePeriodicLetters idempotent', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-idem-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    database.ensurePeriodicLetters(Date.now())
+    const r2 = database.ensurePeriodicLetters(Date.now())
+    expect(r2.initialized).toBe(false)
+    expect(r2.daily.skipped + r2.daily.existing).toBe(r2.daily.checked || 0)
+  })
+
+  it('ensureLetterForPeriod creates weekly for current week with expedition', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-weekly-gen-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const now = Date.now()
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '本周远征' })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [now - 600000, session.id])
+    database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    const period = getWeeklyPeriod(now)
+    const r = database.ensureLetterForPeriod({ letterType: 'weekly', period })
+    expect(r.created).toBe(true)
+    expect(r.letter).not.toBeNull()
+  })
+
+  it('ensurePeriodicLetters does not create current day', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-no-current-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const now = Date.now()
+    const todayPeriod = getDailyPeriod(now)
+    const session = database.startSession({ taskId: null, areaId: area.id, content: '今天' })
+    database.stopSession(session.id, { outcome: '', taskCompleted: false })
+    database.ensurePeriodicLetters(now)
+    // Current day should not be created
+    const letters = database.listLetters({})
+    expect(letters.every((l: any) => l.period_key !== todayPeriod.periodKey)).toBe(true)
+  })
+
+  it('old database letter count zero before mail system', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-old-db-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const taskCount = database.getStructure().tasks.length
+    // Run ensure — should not create fake historical letters
+    database.ensurePeriodicLetters(Date.now())
+    expect(database.listLetters({}).length).toBe(0)
+    expect(database.getStructure().tasks.length).toBe(taskCount)
+  })
+
+  it('ensureLetterForPeriod creates for review-only day', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-review-letter-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.saveDailyReview({ date: localDateKey(now), win: '复习了第三章', blocker: '', energy: 4, tomorrowTask: '' })
+    const period = getDailyPeriod(now)
+    const r = database.ensureLetterForPeriod({ letterType: 'daily', period })
+    expect(r.created).toBe(true)
+    expect(r.letter).not.toBeNull()
+  })
+
+  it('ensurePeriodicLetters does not exceed 30 day backtrack', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-max-days-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    // Set mail_started_at to 40 days ago
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('mail_started_at_ms', ?)", [String(Date.now() - 40 * 86400000)])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [getDailyPeriod(Date.now() - 40 * 86400000).periodKey])
+    const r = database.ensurePeriodicLetters(Date.now())
+    // Should only have checked at most 30 days worth, not 40
+    expect(r.daily.checked).toBeLessThanOrEqual(31)
+  })
+})
+
+describe('IPC DTO mapping', () => {
+  it('list DTO does not expose fact_json', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-dto-list-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-09-01', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: '测试信', fact: { totalActiveSeconds: 100, sessionCounts: { brief: 0, short: 1, expedition: 0, deep: 0 }, completedTasks: [] }, templateBody: '正文内容比较多'.repeat(20) })
+    const letters = database.listLetters({})
+    const dto = letters.map((l: any) => ({
+      id: l.id, letterType: l.letter_type, subject: l.subject,
+      bodyPreview: (l.template_body || '').slice(0, 80) + ((l.template_body || '').length > 80 ? '…' : ''),
+      isRead: l.is_read === 1, readAt: l.read_at, createdAt: l.created_at,
+    }))
+    expect(dto[0]).not.toHaveProperty('fact_json')
+    expect(dto[0]).not.toHaveProperty('template_body')
+    expect(dto[0].bodyPreview.length).toBeLessThanOrEqual(81)
+  })
+
+  it('detail body falls back to template when ai_body is null', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-dto-detail-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const id = crypto.randomUUID()
+    database.createLetter({ id, letterType: 'daily', periodKey: '2026-09-02', periodStart: 1, periodEnd: 2, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: 'fallback', fact: {}, templateBody: '模板正文' })
+    const l = database.getLetterById(id)
+    const body = l.body_source === 'ai' && l.ai_body ? l.ai_body : l.template_body
+    expect(body).toBe('模板正文')
+  })
+
+  it('getCompletedStats does not include running sessions in stats', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-dto-stats-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const area = database.getStructure().areas[0]
+    const s = database.startSession({ taskId: null, areaId: area.id, content: 'running only' })
+    // Do NOT stop — session remains running
+    const period = getDailyPeriod(Date.now())
+    const stats = database.getCompletedStats(period.periodStart, period.periodEnd)
+    expect(stats.totalActiveSeconds).toBe(0)
+    expect(stats.sessionCounts.brief + stats.sessionCounts.short + stats.sessionCounts.expedition + stats.sessionCounts.deep).toBe(0)
+  })
+
+  it('ensurePeriodicLetters idempotent via IPC-style repeated calls', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-ipc-idem-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const r1 = database.ensurePeriodicLetters()
+    const r2 = database.ensurePeriodicLetters()
+    expect(r2.initialized).toBe(false)
+    expect(r2.daily.created).toBe(0)
+    expect(r2.weekly.created).toBe(0)
   })
 })

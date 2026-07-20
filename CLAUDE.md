@@ -89,6 +89,55 @@ Tests live in `src/lib/*.test.ts`. The test command in `package.json` explicitly
 - CSS custom properties for theming: `--accent` is the user-chosen accent color applied via `document.documentElement.style.setProperty`.
 - Companion sprites are CSS-only pixel art using nested `<i>` and `<b>` elements with class names like `sprite-body`, `sprite-head`, `sprite-ear-left`, etc.
 
+## Pixel font & chart rules (hard rules — do not debate)
+
+### Pixel font priority
+
+1. All player-facing text and numbers SHALL use the project's approved pixel font by default: `font-family: 'Fusion Pixel SC'`.
+
+2. The following categories of text must all use pixel font: page titles, module headings, navigation labels, buttons, dates, times, durations, raw numbers, units (小时/分钟), chart axis labels, chart values, tooltips, status labels, empty states, world prompts, and form labels.
+
+3. **No mixed font faces within a single reading.** Examples of violations: date in pixel font but total duration in Georgia serif; number in pixel font but "小时/分钟" in modern sans-serif. The hero duration number AND its unit must share the same pixel font family. Hierarchy is achieved through font-size, letter-spacing, opacity, and font-weight — never by switching to serif or sans-serif.
+
+4. Long-form reading content (letter bodies, user journal entries, extended descriptions) may use a project-approved pixel body font but must NOT fall back to Song, Microsoft YaHei, PingFang SC, or browser defaults that conflict with the pixel world.
+
+5. Every font change must be verified with `getComputedStyle()`, not just class names. Confirm font-family, font-size, font-weight, and that the font file actually loaded (no fallback, no !important collision from parent rules).
+
+6. On critical readings (hero duration, date), screenshot verification must show that date digits, duration digits, and duration units all belong to the same pixel font system.
+
+### Chart readability
+
+1. Charts must be readable without hovering. The distinction between "no data" and "has data" must be visible at a glance.
+
+2. Heatmaps: value 0 → completely transparent, no visible cell, no default border. The lowest non-zero tier must be clearly distinguishable from the background. All four non-zero tiers must be distinguishable from each other. Hover is for precise values, not for discovering whether data exists.
+
+3. Chart colors must follow: empty < low < medium < high, with clear lightness and chroma steps. No default business blue, no red/green performance colors. Brass (#C39755) is reserved for selection, ticks, and interaction emphasis only.
+
+4. Charts are validated by screenshot, not by reporting source-code color constants.
+
+## Player-visible world vocabulary
+
+UI text visible to players SHALL prefer these terms:
+
+- 出征 / 远征 / 归程 / 旅途 / 路程 / 路线 / 足迹 / 星轨 / 星光 / 路标 / 时辰 / 星图 / 观测
+
+UI text visible to players SHALL avoid:
+
+- 专注 / 记录 / 投入 / 活跃 / 统计 / 分析 / 航程 / 效率 / 峰值 / 主导 / 占比
+
+Notes:
+- "航程" carries nautical/aviation connotations incompatible with the on-foot expedition and border-town setting.
+- "专注、记录、统计" are product/technical terms, not world-facing observatory language.
+- Technical variable names, database columns, and internal comments may continue using the original technical names.
+- Every player-visible string must pass this vocabulary check before being committed.
+
+## React hook order (hard rule)
+
+- All React hooks (useState, useEffect, useMemo, useCallback, useRef, useContext) MUST be placed before every early return (`if (loading) return ...`, `if (error) return ...`, guard clauses).
+- Hooks MUST NOT appear inside conditional branches (`if`, `&&`, `? :`).
+- Every render must call the exact same hooks in the exact same order. `tsc`/`npm run build` passing does NOT prove hook order is correct — this must be verified by actually running the Electron app and confirming the page renders without "Rendered more/fewer hooks" warnings.
+- After adding or moving any hook, run the dev Electron app (not just `npm run build`) and smoke-test every page that was modified.
+
 ## Important constraints
 
 - **No router**: page navigation is purely `useState<PageId>` in `AppShell`. Do not introduce a routing library without explicit discussion.

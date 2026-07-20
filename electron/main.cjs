@@ -232,16 +232,97 @@ function registerHandlers() {
   handle('settings:open-data-folder', async () => shell.openPath(database.openDataPath()))
   handle('ai:generate', ({ type, date }) => generateAiReport(type, date))
   handle('inventory:use', (itemId) => database.useItem(itemId))
+  handle('observatory:get-daily', (dateOrTimestamp) => {
+    const d = require('./domain.cjs')
+    const now = dateOrTimestamp ? Number(dateOrTimestamp) : Date.now()
+    const period = d.getDailyPeriod(now)
+    const act = database.getActiveSession()
+    const isToday = d.localDateKey() === period.periodKey
+    if (process.env.VITE_DEV_SERVER_URL) { console.log('[obs:get-daily]', { inputTs: dateOrTimestamp, periodKey: period.periodKey, hasActive: !!act }) }
+    const cur = isToday && act && act.status !== 'cancelled' ? { id: act.id, content: act.content, activeSeconds: act.active_seconds, status: act.status } : null
+    const stats = database.getCompletedStats(period.periodStart, period.periodEnd)
+    const sessions = database.all(
+      "SELECT id, content, active_seconds, ended_at, area_id FROM focus_sessions WHERE status = 'completed' AND ended_at >= ? AND ended_at < ? ORDER BY ended_at DESC",
+      [period.periodStart, period.periodEnd],
+    ).map(s => ({ id: s.id, title: s.content, activeSeconds: s.active_seconds, endedAt: s.ended_at, returnKind: d.getReturnKind(s.active_seconds), areaName: '', areaColor: '' }))
+    const hourly = d.computeDailyHourly(database, period)
+    const review = database.getDailyReview(period.periodKey).review
+    return {
+      period, stats: { totalActiveSeconds: stats.totalActiveSeconds, sessionCounts: stats.sessionCounts, completedTaskCount: stats.completedTaskCount, directionBreakdown: stats.directionBreakdown, longestSessionSeconds: stats.longestSessionSeconds },
+      sessions, hourlyActiveSeconds: hourly, hourlyDistributionPrecision: 'exact',
+      review: review ? { win: review.win || '', blocker: review.blocker || '', energy: review.energy, futureNote: review.tomorrow_task || '' } : null,
+      currentSession: cur,
+    }
+  })
+  handle('observatory:get-weekly', (dateOrTimestamp) => {
+    const d = require('./domain.cjs')
+    const now = dateOrTimestamp ? Number(dateOrTimestamp) : Date.now()
+    const period = d.getWeeklyPeriod(now)
+    const stats = database.getCompletedStats(period.periodStart, period.periodEnd)
+    const dailyActiveSeconds = []
+    for (let i = 0; i < 7; i++) {
+      const ds = database.getCompletedStats(period.periodStart + i * 86400000, period.periodStart + (i + 1) * 86400000)
+      dailyActiveSeconds.push(ds.totalActiveSeconds)
+    }
+    const prev = d.previousWeeklyPeriod(period.periodStart)
+    const prevStats = database.getCompletedStats(prev.periodStart, prev.periodEnd)
+    const tasks = database.all(
+      "SELECT id, title FROM tasks WHERE status = 'done' AND completed_at >= ? AND completed_at < ? ORDER BY completed_at DESC LIMIT 10",
+      [period.periodStart, period.periodEnd],
+    )
+    const heatmap = d.computeWeeklyHeatmap(database, period)
+    return { period, stats: { totalActiveSeconds: stats.totalActiveSeconds, dailyActiveSeconds, sessionCounts: stats.sessionCounts, completedTaskCount: stats.completedTaskCount, directionBreakdown: stats.directionBreakdown, longestSessionSeconds: stats.longestSessionSeconds, previousPeriodTotalSeconds: prevStats.totalActiveSeconds }, representativeTasks: tasks, hourlyActiveSecondsByDay: heatmap, hourlyDistributionPrecision: 'exact' }
+  })
+  handle('observatory:get-review', (date) => {
+    const d = database.getDailyReview(date)
+    return d
+  })
+  handle('observatory:save-review', (data) => database.saveDailyReview(data))
+  handle('mail:list', (opts) => {
+    const letters = database.listLetters(opts)
+    return letters.map(l => ({
+      id: l.id, letterType: l.letter_type, periodKey: l.period_key, periodStart: l.period_start, periodEnd: l.period_end,
+      subject: l.subject, bodyPreview: (l.template_body || '').slice(0, 80) + ((l.template_body || '').length > 80 ? '…' : ''),
+      isRead: l.is_read === 1, readAt: l.read_at, createdAt: l.created_at,
+    }))
+  })
+  handle('mail:get', (id) => {
+    const l = database.getLetterById(id)
+    if (!l) { const e = new Error('信件不存在'); e.code = 'LETTER_NOT_FOUND'; throw e }
+    const body = l.body_source === 'ai' && l.ai_body ? l.ai_body : l.template_body
+    const fact = l.fact
+    return {
+      id: l.id, letterType: l.letter_type,
+      period: { periodKey: l.period_key, periodStart: l.period_start, periodEnd: l.period_end, timezoneName: l.timezone_name, timezoneOffsetMinutes: l.timezone_offset_minutes },
+      subject: l.subject, body, bodySource: l.body_source,
+      factSummary: { totalActiveSeconds: fact.totalActiveSeconds || 0, sessionCounts: fact.sessionCounts || {}, completedTaskCount: (fact.completedTasks || []).length },
+      isRead: l.is_read === 1, readAt: l.read_at, replyText: l.reply_text, createdAt: l.created_at,
+    }
+  })
+  handle('mail:get-unread-count', () => database.getUnreadLetterCount())
+  handle('mail:get-latest-unread', () => {
+    const l = database.getLatestUnreadLetter()
+    return l ? { id: l.id, subject: l.subject, letterType: l.letter_type, createdAt: l.created_at } : null
+  })
+  handle('mail:mark-read', (id) => { const l = database.markLetterRead(id); return { id: l.id, isRead: l.is_read === 1, readAt: l.read_at } })
+  handle('mail:mark-unread', (id) => { const l = database.markLetterUnread(id); return { id: l.id, isRead: l.is_read === 1, readAt: l.read_at } })
+  handle('mail:save-reply', ({ id, replyText }) => {
+    try { const l = database.saveLetterReply(id, replyText); return { replyText: l.reply_text, updatedAt: l.updated_at } }
+    catch (e) { const err = new Error(e.message); err.code = 'INVALID_REPLY'; throw err }
+  })
+  handle('mail:ensure-periodic', () => database.ensurePeriodicLetters())
   ipcMain.on('window:show', showWindow)
 }
 
 app.whenReady().then(async () => {
   database = await new StudyDatabase(app.getPath('userData')).init()
   registerHandlers()
+  try { database.ensurePeriodicLetters() } catch (_) { /* non-critical on startup */ }
   createWindow()
   createTray()
   powerMonitor.on('suspend', () => database.autoPauseForSuspend())
   powerMonitor.on('resume', () => {
+    try { database.ensurePeriodicLetters() } catch (_) { /* non-critical */ }
     if (database.getActiveSession()?.status === 'paused' && Notification.isSupported()) {
       new Notification({ title: '专注已自动暂停', body: '电脑刚刚恢复，请确认是否继续。' }).show()
     }
