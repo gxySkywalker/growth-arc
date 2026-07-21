@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext'
 import { friendlyError, formatClock, formatDuration } from '../lib/format'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
+import { setInputContext, getInputContext } from '../lib/inputContext'
 import { PixelCompanion } from './PixelCompanion'
 import type { ExpeditionResult } from '../types'
 import { bgm } from '../lib/audio'
@@ -43,6 +44,15 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
   const [busy, setBusy] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [confirmCancelBusy, setConfirmCancelBusy] = useState(false)
+
+  // ── Dialog input context ──────────────────────────────────
+  useEffect(() => {
+    if (startOpen || stopOpen || confirmCancelOpen || expedition) {
+      setInputContext('dialog')
+    } else {
+      setInputContext('menu') // restore menu context when all dialogs close
+    }
+  }, [startOpen, stopOpen, confirmCancelOpen, expedition])
   const [muted, setMuted] = useState(false)
   const [tick, setTick] = useState(Date.now())
   const snapshotAt = useRef(Date.now())

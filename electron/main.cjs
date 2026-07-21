@@ -96,6 +96,135 @@ function parseResponseText(response) {
   throw new Error('模型没有返回可读取的报告')
 }
 
+// ── Angel letter AI narrative ───────────────────────────────
+
+const ANGEL_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'angel-letter.txt'), 'utf-8')
+const ANGEL_PROMPT_VERSION = 1
+
+async function generateLetterNarrative(letter) {
+  const apiKey = readApiKey()
+  if (!apiKey) return { success: false, status: 'template' }
+
+  const settings = database.getSettings()
+  const provider = settings.api_provider || 'openai'
+  const model = settings.model || 'gpt-5.6-luna'
+  // Support custom base_url for OpenAI-compatible providers
+  const baseUrl = settings.ai_base_url || (
+    provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
+  )
+
+  const fact = typeof letter.fact === 'string' ? JSON.parse(letter.fact) : letter.fact
+  const factPrompt = JSON.stringify({ letterType: letter.letter_type, fact }, null, 0)
+
+  const systemPrompt = ANGEL_PROMPT + '\n\n## 当前信件事实\n' + factPrompt
+  const userMsg = '请根据当前事实，以小天使的口吻写一封短信。'
+
+  const body = {
+    model,
+    max_tokens: 600,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMsg },
+    ],
+  }
+
+  try {
+    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    })
+    const json = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const errMsg = json?.error?.message || `HTTP ${response.status}`
+      if (response.status === 429) return { success: false, status: 'quota_exceeded' }
+      return { success: false, status: 'failed', error: errMsg }
+    }
+    const text = json.choices?.[0]?.message?.content?.trim()
+    if (!text) return { success: false, status: 'failed', error: 'empty response' }
+    return { success: true, status: 'success', text, provider, model }
+  } catch (e) {
+    return { success: false, status: 'failed', error: e.message }
+  }
+}
+
+async function ensureAiNarratives() {
+  const MAX_RETRIES = 3
+  const GLOBAL_TIMEOUT = 60000 // 60s max for all letters
+  const deadline = Date.now() + GLOBAL_TIMEOUT
+
+  // Only process NEW letters (pending), not historical template letters.
+  // Failed letters with retries remaining are also retried.
+  const pending = database.all(
+    `SELECT * FROM letters WHERE template_body IS NOT NULL AND template_body != ''
+     AND (ai_status = 'pending'
+       OR (ai_status = 'failed' AND COALESCE(ai_retry_count,0) < ?))
+     ORDER BY created_at DESC LIMIT 10`, [MAX_RETRIES]
+  )
+  for (const letter of pending) {
+    if (Date.now() > deadline) break // global timeout
+    const result = await generateLetterNarrative(letter)
+    if (result.success) {
+      database.run(
+        "UPDATE letters SET ai_body = ?, body_source = 'ai', ai_status = 'success', ai_provider = ?, ai_model = ?, ai_prompt_version = ?, ai_retry_count = 0 WHERE id = ?",
+        [result.text, result.provider, result.model, ANGEL_PROMPT_VERSION, letter.id]
+      )
+    } else {
+      const newRetry = (letter.ai_retry_count || 0) + 1
+      const finalStatus = newRetry >= MAX_RETRIES ? 'failed' : result.status
+      database.run(
+        "UPDATE letters SET ai_status = ?, ai_retry_count = ? WHERE id = ?",
+        [finalStatus, newRetry, letter.id]
+      )
+    }
+  }
+}
+
+// ── Test letter: verify AI configuration works ──────────────
+
+async function generateTestLetter() {
+  const apiKey = readApiKey()
+  if (!apiKey) return { success: false, error: '没有配置信笺钥匙' }
+
+  const settings = database.getSettings()
+  const provider = settings.api_provider || 'openai'
+  const model = settings.model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-5.6-luna')
+
+  const testFact = {
+    letterType: 'daily',
+    fact: { chronicle: { season: '夏' }, journey: { mainDirection: '松风林' } },
+  }
+  const systemPrompt = ANGEL_PROMPT + '\n\n## 测试信笺\n' + JSON.stringify(testFact)
+
+  const baseUrl = settings.ai_base_url || (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1')
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model, max_tokens: 200,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '请写一封很短的测试信，20字以内。' },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const json = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      return { success: false, error: json?.error?.message || `HTTP ${response.status}` }
+    }
+    const text = json.choices?.[0]?.message?.content?.trim()
+    return text ? { success: true, text, provider, model } : { success: false, error: '空响应' }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+}
+
+// ── Existing AI report ──────────────────────────────────────
+
 async function generateAiReport(type, date) {
   const apiKey = readApiKey()
   if (!apiKey) throw new Error('请先在设置中配置 API Key')
@@ -295,6 +424,10 @@ function registerHandlers() {
       id: l.id, letterType: l.letter_type,
       period: { periodKey: l.period_key, periodStart: l.period_start, periodEnd: l.period_end, timezoneName: l.timezone_name, timezoneOffsetMinutes: l.timezone_offset_minutes },
       subject: l.subject, body, bodySource: l.body_source,
+      aiStatus: l.ai_status || 'template',
+      aiProvider: l.ai_provider || undefined,
+      aiModel: l.ai_model || undefined,
+      aiPromptVersion: l.ai_prompt_version || undefined,
       factSummary: { totalActiveSeconds: fact.totalActiveSeconds || 0, sessionCounts: fact.sessionCounts || {}, completedTaskCount: (fact.completedTasks || []).length },
       isRead: l.is_read === 1, readAt: l.read_at, replyText: l.reply_text, createdAt: l.created_at,
     }
@@ -310,19 +443,37 @@ function registerHandlers() {
     try { const l = database.saveLetterReply(id, replyText); return { replyText: l.reply_text, updatedAt: l.updated_at } }
     catch (e) { const err = new Error(e.message); err.code = 'INVALID_REPLY'; throw err }
   })
-  handle('mail:ensure-periodic', () => database.ensurePeriodicLetters())
+  handle('settings:get-birthday', () => database.getBirthdaySettings())
+  handle('settings:set-birthday', ({ month, day }) => database.setBirthday(month, day))
+  handle('dev:db-info', () => database.getDbInfo())
+  handle('mail:generate-narratives', () => ensureAiNarratives())
+  handle('mail:test-letter', () => generateTestLetter())
+  handle('dev:repair-mail-timeline', () => database.repairMailTimeline())
+  handle('dev:clean-test-events', () => database.cleanTestEvents())
+  handle('dev:reset-mail-timeline', () => database.resetMailTimeline())
+  handle('dev:diagnose-mail', () => database.diagnoseMail())
+  handle('mail:ensure-periodic', (simTs) => {
+    const now = typeof simTs === 'number' ? simTs : Date.now()
+    const periodic = database.ensurePeriodicLetters(now)
+    const events = database.ensureEventLetters(now)
+    const birthday = database.ensureBirthdayLetter(now)
+    return { ...periodic, events, birthday }
+  })
   ipcMain.on('window:show', showWindow)
 }
 
 app.whenReady().then(async () => {
   database = await new StudyDatabase(app.getPath('userData')).init()
   registerHandlers()
-  try { database.ensurePeriodicLetters() } catch (_) { /* non-critical on startup */ }
+  try { database.ensureWelcomeLetter() } catch (_) { /* non-critical */ }
+  try { database.ensurePeriodicLetters(); database.ensureEventLetters(); database.ensureBirthdayLetter() } catch (_) { /* non-critical on startup */ }
   createWindow()
+  // AI narratives run in background — never block the game
+  ensureAiNarratives().catch(() => {})
   createTray()
   powerMonitor.on('suspend', () => database.autoPauseForSuspend())
   powerMonitor.on('resume', () => {
-    try { database.ensurePeriodicLetters() } catch (_) { /* non-critical */ }
+    try { database.ensurePeriodicLetters(); database.ensureEventLetters(); database.ensureBirthdayLetter() } catch (_) { /* non-critical */ }
     if (database.getActiveSession()?.status === 'paused' && Notification.isSupported()) {
       new Notification({ title: '专注已自动暂停', body: '电脑刚刚恢复，请确认是否继续。' }).show()
     }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import type { Companion } from '../types'
+import { canHandle } from '../lib/inputContext'
 import '../cottage-scene.css'
 import roomBackdrop from '../../assets/art/environments/cottage/cottage_room_backdrop_provisional_v1.png'
 import playerSprite from '../../assets/art/characters/player/player_idle_front_provisional_v1.png'
@@ -49,6 +50,7 @@ export function CottageScene({
   }
 
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!canHandle('world')) return
     if (['e', 'enter', ' '].includes(event.key.toLowerCase())) {
       event.preventDefault()
       if (isNearCottageCompanion(position)) {

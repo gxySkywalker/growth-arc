@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('growthArc', {
     setApiKey: (key) => invoke('settings:set-api-key', key),
     clearApiKey: () => invoke('settings:clear-api-key'),
     openDataFolder: () => invoke('settings:open-data-folder'),
+    getBirthday: () => invoke('settings:get-birthday'),
+    setBirthday: (month, day) => invoke('settings:set-birthday', { month, day }),
   },
   ai: {
     generate: (type, date) => invoke('ai:generate', { type, date }),
@@ -76,7 +78,14 @@ contextBridge.exposeInMainWorld('growthArc', {
     markRead: (id) => invoke('mail:mark-read', id),
     markUnread: (id) => invoke('mail:mark-unread', id),
     saveReply: (id, replyText) => invoke('mail:save-reply', { id, replyText }),
-    ensurePeriodic: () => invoke('mail:ensure-periodic'),
+    ensurePeriodic: (simTs) => invoke('mail:ensure-periodic', simTs),
+    testLetter: () => invoke('mail:test-letter'),
+  },
+  dev: {
+    cleanTestEvents: () => invoke('dev:clean-test-events'),
+    dbInfo: () => invoke('dev:db-info'),
+    resetMailTimeline: () => invoke('dev:reset-mail-timeline'),
+    diagnoseMail: () => invoke('dev:diagnose-mail'),
   },
   window: {
     show: () => ipcRenderer.send('window:show'),

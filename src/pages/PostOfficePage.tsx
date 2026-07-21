@@ -1,13 +1,68 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import type { PageId } from '../types'
+import type { PageId, NavState, NavAction, LetterListItem } from '../types'
 import { Icon } from '../components/Icon'
-import { MOCK_LETTERS, CATEGORY_LABELS, canViewObservatory, observatoryLinkLabel, type MockCategory, type MockLetter } from '../lib/mailMock'
+import { LetterViewer } from '../components/LetterViewer'
+import { CATEGORY_LABELS, canViewObservatory, observatoryLinkLabel, type MockCategory, type MockLetter, type ObservatoryTarget } from '../lib/mailMock'
+import { playUISound } from '../lib/audio'
 
-// ── Prototype session persistence (REMOVE before production IPC) ──
-const SK_READ = 'growth-arc.post-office.prototype.read-ids'
+// ── IPC-derived letter → UI-compatible MockLetter adapter ─────
+
+function senderForType(letterType: string): string {
+  if (letterType === 'festival') return '小镇'
+  if (letterType === 'memorial') return '小镇'
+  return '小天使'
+}
+
+function dateLabelFromPeriod(letterType: string, periodStart: number, periodEnd?: number): string {
+  const d = new Date(periodStart)
+  if (letterType === 'weekly' && periodEnd) {
+    const e = new Date(periodEnd - 86400000) // last day of the period
+    return `${d.getMonth() + 1}月${d.getDate()}日—${e.getMonth() + 1}月${e.getDate()}日`
+  }
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function categoryFromType(letterType: string): MockCategory {
+  if (letterType === 'daily') return 'daily'
+  if (letterType === 'weekly') return 'weekly'
+  if (letterType === 'festival') return 'festival'
+  if (letterType === 'memorial') return 'memorial'
+  return 'world'
+}
+
+function observatoryTargetFromPeriod(letterType: string, periodStart: number, periodEnd: number): ObservatoryTarget | undefined {
+  if (letterType === 'daily') return { periodType: 'daily', periodStart: ymd(periodStart), periodEnd: ymd(periodStart) }
+  if (letterType === 'weekly') return { periodType: 'weekly', periodStart: ymd(periodStart), periodEnd: ymd(periodEnd - 86400000) }
+  return undefined
+}
+
+function ymd(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Convert an IPC LetterListItem + cached detail into a UI MockLetter */
+function ipcToLetter(item: LetterListItem, detail?: { body: string; factSummary: any; replyText: string | null }): MockLetter {
+  return {
+    id: item.id,
+    category: categoryFromType(item.letterType),
+    subtype: item.letterType,
+    senderName: senderForType(item.letterType),
+    subject: item.subject,
+    body: detail?.body ?? item.bodyPreview ?? '',
+    dateLabel: dateLabelFromPeriod(item.letterType, item.periodStart, item.periodEnd),
+    occurredAt: ymd(item.periodStart),
+    isRead: item.isRead,
+    hasReply: detail ? (detail.replyText ?? '').trim().length > 0 : false,
+    replyText: detail?.replyText ?? '',
+    factSummary: detail?.factSummary,
+    observatoryTarget: observatoryTargetFromPeriod(item.letterType, item.periodStart, item.periodEnd),
+  }
+}
+
+// ── Session persistence (notes & memories only — read/reply migrate to IPC) ──
 const SK_NOTES = 'growth-arc.post-office.prototype.notes'
 const SK_MEMORIES = 'growth-arc.post-office.prototype.memories'
-const SK_REPLIES = 'growth-arc.post-office.prototype.reply-drafts'
 
 function loadJson<T>(key: string, fallback: T): T {
   try { const raw = sessionStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback }
@@ -17,18 +72,27 @@ function saveJson(key: string, value: unknown) { sessionStorage.setItem(key, JSO
 
 function letterDateLabel(l: MockLetter) { return l.dateLabel }
 function letterSubLabel(l: MockLetter) {
-  if (l.category === 'daily') return '每日星页'
+  if (l.category === 'daily') return '每日来信'
   if (l.category === 'weekly') return '每周来信'
   if (l.category === 'festival') {
     if (l.subtype.includes('climax')) return '归灯夜'
     return '节庆来信'
   }
-  if (l.category === 'memorial') return '生日祝福'
-  if (l.category === 'world') return '远方来信'
+  if (l.category === 'memorial') return '纪念来信'
+  if (l.category === 'world') return '友人来信'
   return l.category
 }
 
 type InteractionMode = 'note' | 'memory' | 'reply' | 'none'
+
+function emptyMessage(cat: MockCategory): string {
+  if (cat === 'daily') return '今天还没有来信。\n完成一次远征后，小天使会整理今日的足迹。'
+  if (cat === 'weekly') return '这里还没有周报。\n完整的一周结束后，旅途札记会出现。'
+  if (cat === 'festival') return '这里暂时没有节庆来信。\n归灯季到来时，会有新的消息。'
+  if (cat === 'memorial') return '纪念来信将在未来开启。\n那些重要的日子会被记得。'
+  if (cat === 'world') return '还没有来自友人的消息。\n商队和旅人的信会随着时间抵达。'
+  return '这里还没有信。'
+}
 
 function getInteractionMode(letter: MockLetter): InteractionMode {
   if (letter.category === 'daily' || letter.category === 'weekly') return 'note'
@@ -37,94 +101,177 @@ function getInteractionMode(letter: MockLetter): InteractionMode {
   return 'none'
 }
 
-interface PostOfficePageProps { onNavigate?: (page: PageId) => void }
+interface PostOfficePageProps {
+  onNavigate?: (target: PageId | { page: PageId; obsTarget?: ObservatoryTarget }) => void
+  navState: NavState
+  dispatch: (action: NavAction) => void
+  actionsRef: React.MutableRefObject<{
+    poCatCount: number; poLetterCount: number
+    poSetCategory: (index: number) => void
+    poOpenLetter: (index: number) => void
+    poBackFromContent: () => void
+  }>
+}
 
-export function PostOfficePage({ onNavigate }: PostOfficePageProps) {
+export function PostOfficePage({ onNavigate, navState, dispatch, actionsRef }: PostOfficePageProps) {
   const [activeCategory, setActiveCategory] = useState<MockCategory>('new')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set(loadJson<string[]>(SK_READ, [])))
+
+  // ── Real mail data from IPC ─────────────────────────────────
+  const [ipcLetters, setIpcLetters] = useState<LetterListItem[] | null>(null)
+  const [ipcLoading, setIpcLoading] = useState(true)
+  const detailCache = useRef<Map<string, { body: string; factSummary: any; replyText: string | null; aiStatus?: string }>>(new Map())
+  const [readIds, setReadIds] = useState<Set<string>>(new Set())
+  const [replyMap, setReplyMap] = useState<Record<string, string>>({})
+
+  // Bootstrap: ensure periodic letters + load list
+  useEffect(() => {
+    let cancelled = false
+    async function init() {
+      try {
+        const list = await window.growthArc.mail.list()
+        if (cancelled) return
+        setIpcLetters(list)
+        setReadIds(new Set(list.filter(l => l.isRead).map(l => l.id)))
+      } catch (e) {
+        console.warn('[mail] IPC init failed', e)
+      } finally {
+        if (!cancelled) setIpcLoading(false)
+      }
+    }
+    init()
+    return () => { cancelled = true }
+  }, [])
+
   const [noteMap, setNoteMap] = useState<Record<string, string>>(() => loadJson(SK_NOTES, {}))
   const [memoryMap, setMemoryMap] = useState<Record<string, string>>(() => loadJson(SK_MEMORIES, {}))
-  const [replyMap, setReplyMap] = useState<Record<string, string>>(() => loadJson(SK_REPLIES, {}))
   const [memoryOpen, setMemoryOpen] = useState<Record<string, boolean>>({})
   const [sealJustBroke, setSealJustBroke] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
-  const readTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const openAnimTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [newSnapshot, setNewSnapshot] = useState<MockLetter[]>(() => MOCK_LETTERS.new.filter(l => !readIds.has(l.id)))
 
-  const flushRead = useCallback(() => {
-    if (readTimer.current) clearTimeout(readTimer.current); readTimer.current = null
-    saveJson(SK_READ, [...readIds])
-  }, [readIds])
-  const persistMaps = useCallback(() => {
-    saveJson(SK_NOTES, noteMap); saveJson(SK_MEMORIES, memoryMap); saveJson(SK_REPLIES, replyMap)
-  }, [noteMap, memoryMap, replyMap])
-
-  useEffect(() => { flushRead() }, [flushRead])
-  useEffect(() => { persistMaps() }, [persistMaps])
-  // Dev: reset birthday read state on refresh for testing
   useEffect(() => {
-    if ((import.meta as any).env?.DEV) {
-      setReadIds(prev => { const n = new Set(prev); MOCK_LETTERS.memorial.forEach(l => n.delete(l.id)); saveJson(SK_READ, [...n]); return n })
+    if (navState.zone === 'postoffice' && navState.poZone === 'content') {
+      dispatch({ type: 'SET_PO_ZONE', poZone: 'categories' })
     }
   }, [])
 
+  const readTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openAnimTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { saveJson(SK_NOTES, noteMap) }, [noteMap])
+  useEffect(() => { saveJson(SK_MEMORIES, memoryMap) }, [memoryMap])
   useEffect(() => () => { if (readTimer.current) clearTimeout(readTimer.current) }, [])
+  useEffect(() => () => { if (openAnimTimer.current) clearTimeout(openAnimTimer.current) }, [])
 
-  // Rebuild new-snapshot on navigation away/back
-  useEffect(() => {
-    if (activeCategory !== 'new') {
-      setNewSnapshot(MOCK_LETTERS.new.filter(l => !readIds.has(l.id)))
+  // ── Derive letter arrays ────────────────────────────────────
+  const allLetters: MockLetter[] = useMemo(() => {
+    const ipc = ipcLetters
+    if (ipc) {
+      return ipc.map(item => {
+        const detail = detailCache.current.get(item.id)
+        return ipcToLetter(item, detail)
+      })
     }
-  }, [activeCategory, readIds])
+    return []
+  }, [ipcLetters])
 
-  const unreadNewSnapshot = useMemo(() => newSnapshot.filter(l => !readIds.has(l.id)), [newSnapshot, readIds])
-  const letters = activeCategory === 'new' ? newSnapshot : (MOCK_LETTERS[activeCategory] || [])
-  const hasUnread = unreadNewSnapshot.length > 0
-  const allMockLetters = MOCK_LETTERS.all
+  const newLetters = useMemo(() => allLetters.filter(l => !l.isRead), [allLetters])
 
-  const categories: MockCategory[] = [
-    ...(newSnapshot.length > 0 ? ['new' as MockCategory] : []),
-    'daily', 'weekly', 'festival', 'memorial', 'world', 'all',
-  ]
+  const lettersByCat = useMemo(() => {
+    const map: Record<string, MockLetter[]> = {}
+    for (const cat of ['daily', 'weekly', 'festival', 'memorial', 'world'] as MockCategory[]) {
+      map[cat] = allLetters.filter(l => l.category === cat)
+    }
+    map['all'] = allLetters.filter(l => readIds.has(l.id))
+    return map
+  }, [allLetters, readIds])
+
+  const letters = activeCategory === 'new' ? newLetters
+    : (lettersByCat[activeCategory] || [])
+  const hasUnread = newLetters.length > 0
+
+  const ALL_CATEGORIES: MockCategory[] = ['daily', 'weekly', 'festival', 'memorial', 'world']
+  const categories: MockCategory[] = useMemo(() => {
+    const cats: MockCategory[] = ['new']
+    cats.push(...ALL_CATEGORIES)
+    cats.push('all')
+    return cats
+  }, [])
 
   const categoryHasUnread = (cat: MockCategory) => {
     if (cat === 'new' || cat === 'all') return false
-    return MOCK_LETTERS[cat]?.some(l => !readIds.has(l.id)) ?? false
+    return (lettersByCat[cat] || []).some(l => !readIds.has(l.id))
   }
 
-  useEffect(() => {
-    if (letters.length > 0 && !letters.find(l => l.id === selectedId)) {
-      setSelectedId(letters[0].id)
-    }
-  }, [activeCategory])
+  const selectedLetter = allLetters.find(l => l.id === selectedId) || null
 
-  const selectedLetter = allMockLetters.find(l => l.id === selectedId) || null
+  // ── Expose actions for global keyboard handler ──────────────
+  actionsRef.current = {
+    poCatCount: categories.length,
+    poLetterCount: letters.length,
+    poSetCategory: (i: number) => {
+      const cat = categories[i]
+      if (cat != null) { setActiveCategory(cat); setSelectedId(null) }
+    },
+    poOpenLetter: (i: number) => {
+      const letter = letters[i]
+      if (letter) openLetter(letter)
+    },
+    poBackFromContent: () => { setSelectedId(null) },
+  }
 
-  const markRead = (id: string) => {
+  // ── Read state via IPC ──────────────────────────────────────
+  const markRead = useCallback((id: string) => {
     if (!readIds.has(id)) {
       setReadIds(prev => new Set([...prev, id]))
       setSealJustBroke(id)
       if (readTimer.current) clearTimeout(readTimer.current)
-      readTimer.current = setTimeout(() => { setSealJustBroke(null); flushRead() }, 1000)
+      readTimer.current = setTimeout(() => { setSealJustBroke(null) }, 1000)
+      // Persist to backend
+      window.growthArc.mail.markRead(id).catch(() => {})
     }
-  }
+  }, [readIds])
 
-  const openLetter = (letter: MockLetter) => {
+  // ── Open letter: fetch full detail if needed ────────────────
+  const openLetter = useCallback(async (letter: MockLetter) => {
     setSelectedId(letter.id)
-    if (!readIds.has(letter.id)) {
+    const isUnread = !readIds.has(letter.id)
+
+    // Fetch full detail from IPC if not cached
+    if (!detailCache.current.has(letter.id)) {
+      try {
+        const detail = await window.growthArc.mail.get(letter.id)
+        detailCache.current.set(letter.id, {
+          body: detail.body,
+          factSummary: detail.factSummary,
+          replyText: detail.replyText,
+          aiStatus: detail.aiStatus,
+        })
+        // Update replyMap from server state
+        if (detail.replyText) {
+          setReplyMap(prev => ({ ...prev, [letter.id]: detail.replyText! }))
+        }
+      } catch (e) {
+        console.warn('[mail] get failed for', letter.id, e)
+      }
+    }
+
+    if (isUnread) {
       setOpeningId(letter.id)
+      playUISound('mail_open')
       if (openAnimTimer.current) clearTimeout(openAnimTimer.current)
-      openAnimTimer.current = setTimeout(() => setOpeningId(null), 480)
+      openAnimTimer.current = setTimeout(() => setOpeningId(null), 720)
     }
     markRead(letter.id)
-  }
+  }, [readIds, markRead])
 
-  useEffect(() => () => {
-    if (readTimer.current) clearTimeout(readTimer.current)
-    if (openAnimTimer.current) clearTimeout(openAnimTimer.current)
-  }, [])
+  // Re-fetch selected letter when cache updates
+  const [, forceUpdate] = useState(0)
+  const selectedLetterFull = useMemo(() => {
+    if (!selectedLetter || !detailCache.current.has(selectedLetter.id)) return selectedLetter
+    const detail = detailCache.current.get(selectedLetter.id)!
+    return { ...selectedLetter, body: detail.body, factSummary: detail.factSummary, replyText: detail.replyText ?? '', hasReply: (detail.replyText ?? '').trim().length > 0 }
+  }, [selectedLetter, readIds]) // eslint-disable-line
 
   const getValue = (letter: MockLetter): string => {
     const mode = getInteractionMode(letter)
@@ -137,18 +284,35 @@ export function PostOfficePage({ onNavigate }: PostOfficePageProps) {
     const mode = getInteractionMode(letter)
     if (mode === 'note') setNoteMap(prev => ({ ...prev, [letter.id]: value }))
     if (mode === 'memory') setMemoryMap(prev => ({ ...prev, [letter.id]: value }))
-    if (mode === 'reply') setReplyMap(prev => ({ ...prev, [letter.id]: value }))
+    if (mode === 'reply') {
+      setReplyMap(prev => ({ ...prev, [letter.id]: value }))
+      // Persist reply to backend
+      window.growthArc.mail.saveReply(letter.id, value).catch(() => {})
+    }
   }
   const hasValue = (letter: MockLetter) => getValue(letter).trim().length > 0
+  const isRead = (id: string) => readIds.has(id)
+
+  // ── kb-focused from NavState ────────────────────────────────
+  const isActive = navState.zone === 'postoffice'
+  const isCatFocused = (i: number) => isActive && navState.poZone === 'categories' && navState.poCatIndex === i
+  const isLetterFocused = (i: number) => isActive && navState.poZone === 'letters' && navState.poLetterIndex === i
+
+  const isFirstVisit = ipcLetters !== null && ipcLetters.length === 0
+
+  // ── Loading state ───────────────────────────────────────────
+  if (ipcLoading) {
+    return <div className="page mail-page"><div className="loading-state">小天使正在整理邮袋…</div></div>
+  }
 
   const cubbyPanel = (
     <div className="mail-cubby">
       <div className="mail-cubby-tabs">
-        {categories.map(cat => (
+        {categories.map((cat, i) => (
           <button
             key={cat}
-            className={`mail-cubby-tab ${activeCategory === cat ? 'active' : ''}`}
-            onClick={() => { setActiveCategory(cat); setSelectedId(null); if (cat !== 'new') setNewSnapshot(MOCK_LETTERS.new.filter(l => !readIds.has(l.id))) }}
+            className={`mail-cubby-tab ${activeCategory === cat ? 'active' : ''} ${isCatFocused(i) ? 'kb-focused' : ''}`}
+            onClick={() => { playUISound('select'); dispatch({ type: 'SET_PO_CAT_INDEX', index: i }); actionsRef.current.poSetCategory(i); dispatch({ type: 'SET_PO_ZONE', poZone: 'letters' }) }}
             aria-label={CATEGORY_LABELS[cat]}
           >
             <span>{CATEGORY_LABELS[cat]}</span>
@@ -157,19 +321,19 @@ export function PostOfficePage({ onNavigate }: PostOfficePageProps) {
         ))}
       </div>
       <div className="mail-env-list">
-        {letters.map(letter => {
-          const isUnread = !readIds.has(letter.id)
+        {letters.map((letter, i) => {
+          const unread = !isRead(letter.id)
           const isSelected = selectedId === letter.id
           const replied = hasValue(letter)
           const isSpecial = letter.category === 'festival' || letter.category === 'memorial'
-          const envSrc = !isUnread ? 'assets/art/mail/mail_read.png'
+          const envSrc = !unread ? 'assets/art/mail/mail_read.png'
             : isSpecial ? 'assets/art/mail/mail_special.png'
             : 'assets/art/mail/mail_unread.png'
           return (
             <button
               key={letter.id}
-              className={`mail-env ${isSelected ? 'selected' : ''} ${isUnread ? 'unread' : 'read'} ${openingId === letter.id ? 'opening' : ''}`}
-              onClick={() => openLetter(letter)}
+              className={`mail-env ${isSelected ? 'selected' : ''} ${unread ? 'unread' : 'read'} ${openingId === letter.id ? 'opening' : ''} ${isLetterFocused(i) ? 'kb-focused' : ''}`}
+              onClick={() => { playUISound('select'); dispatch({ type: 'SET_PO_LETTER_INDEX', index: i }); openLetter(letter); dispatch({ type: 'SET_PO_ZONE', poZone: 'content' }) }}
               aria-label={`${letter.subject} — ${letter.senderName}`}
             >
               <img className="mail-env-visual" src={envSrc} alt="" />
@@ -181,58 +345,63 @@ export function PostOfficePage({ onNavigate }: PostOfficePageProps) {
             </button>
           )
         })}
-        {letters.length === 0 && <div className="mail-empty">这里还没有信。</div>}
+        {letters.length === 0 && <div className="mail-empty">{emptyMessage(activeCategory)}</div>}
       </div>
     </div>
   )
 
-  const letterInteraction = selectedLetter && (() => {
-    const mode = getInteractionMode(selectedLetter)
-    const val = getValue(selectedLetter)
-    const saved = hasValue(selectedLetter)
-    const setV = (v: string) => setValue(selectedLetter, v)
+  const letterInteraction = selectedLetterFull && (() => {
+    const mode = getInteractionMode(selectedLetterFull)
+    const val = getValue(selectedLetterFull)
+    const saved = hasValue(selectedLetterFull)
+    const setV = (v: string) => setValue(selectedLetterFull, v)
 
     if (mode === 'none') return null
     if (mode === 'note') {
-      const label = selectedLetter.category === 'weekly' ? '留一句给这一周的话……' : '在今天的星页旁留一句话……'
+      const label = selectedLetterFull.category === 'weekly' ? '留一句给这一周的话……' : '在今天的星页旁留一句话……'
       return <div className="mail-reply-slip"><span className="mail-reply-icon">✎</span><textarea className="mail-reply-input" rows={1} placeholder={label} value={val} onChange={e => setV(e.target.value)} />{saved && <span className="mail-reply-saved">已夹进信里</span>}</div>
     }
     if (mode === 'memory') {
-      const isOpen = memoryOpen[selectedLetter.id] || saved
-      if (!isOpen) return <div className="mail-memory-toggle"><button className="text-button" onClick={() => setMemoryOpen(prev => ({ ...prev, [selectedLetter.id]: true }))}>✎ 在这封信后留一句话</button></div>
+      const isOpen = memoryOpen[selectedLetterFull.id] || saved
+      if (!isOpen) return <div className="mail-memory-toggle"><button className="text-button" onClick={() => setMemoryOpen(prev => ({ ...prev, [selectedLetterFull.id]: true }))}>✎ 在这封信后留一句话</button></div>
       return <div className="mail-reply-slip"><span className="mail-reply-icon">✎</span><textarea className="mail-reply-input" rows={1} placeholder="写下今年想记住的一句话……" value={val} onChange={e => setV(e.target.value)} />{saved && <span className="mail-reply-saved">已随这封信收好</span>}</div>
     }
     if (mode === 'reply') {
-      return <div className="mail-reply-slip"><span className="mail-reply-icon">✎</span><textarea className="mail-reply-input" rows={1} placeholder={`回给${selectedLetter.senderName}……`} value={val} onChange={e => setV(e.target.value)} />{saved && <span className="mail-reply-saved">回信草稿已收好</span>}</div>
+      return <div className="mail-reply-slip"><span className="mail-reply-icon">✎</span><textarea className="mail-reply-input" rows={1} placeholder={`回给${selectedLetterFull.senderName}……`} value={val} onChange={e => setV(e.target.value)} />{saved && <span className="mail-reply-saved">回信草稿已收好</span>}</div>
     }
     return null
   })()
 
-  const showObsLink = selectedLetter && canViewObservatory(selectedLetter)
+  const showObsLink = selectedLetterFull && canViewObservatory(selectedLetterFull)
 
-  const letterPaper = (
+  const pendingAI = selectedLetterFull && detailCache.current.has(selectedLetterFull.id)
+    ? detailCache.current.get(selectedLetterFull.id)!.aiStatus === 'pending'
+    : false
+
+  const letterPaper = selectedLetterFull ? (<>
+    <LetterViewer
+      letter={selectedLetterFull}
+      isRead={isRead(selectedLetterFull.id)}
+      sealJustBroke={sealJustBroke === selectedLetterFull.id}
+      viewMode={isRead(selectedLetterFull.id) || activeCategory === 'all' ? 'archive' : 'opening'}
+    >
+      {letterInteraction}
+      {showObsLink && (
+        <div className="mail-obs-link">
+          <button className="text-button" onClick={() => onNavigate?.(selectedLetterFull?.observatoryTarget ? { page: 'observatory', obsTarget: selectedLetterFull.observatoryTarget } : 'observatory')}>
+            <Icon name="star" size={13} /> {observatoryLinkLabel(selectedLetterFull)}
+          </button>
+        </div>
+      )}
+    </LetterViewer>
+    {pendingAI && (
+      <div style={{marginTop:8,fontSize:11,color:'var(--muted)',fontFamily:'Fusion Pixel SC, monospace',textAlign:'center'}}>
+        小天使正在整理这封信笺……
+      </div>
+    )}
+  </>) : (
     <div className="mail-letter-paper">
-      {selectedLetter ? (<>
-        <div className="mail-letter-head">
-          <div><span className="mail-letter-cat">{CATEGORY_LABELS[selectedLetter.category]}</span><span className="mail-letter-date">{selectedLetter.dateLabel}</span></div>
-          <span className="mail-letter-sender">{selectedLetter.senderName}</span>
-          <h2 className="mail-letter-subject">{selectedLetter.subject}</h2>
-        </div>
-        <div className="mail-letter-body"><p className="mail-letter-text">{selectedLetter.body}</p></div>
-        {selectedLetter.factSummary && (selectedLetter.factSummary.focusMinutes !== undefined || selectedLetter.factSummary.waypointCount !== undefined) && (
-          <div className="mail-fact-slip"><div className="mail-fact-slip-header">今日星页</div><div className="mail-fact-slip-grid">
-            {selectedLetter.factSummary.focusMinutes !== undefined && selectedLetter.factSummary.focusMinutes > 0 && <span>专注 {selectedLetter.factSummary.focusMinutes} 分</span>}
-            {selectedLetter.factSummary.waypointCount !== undefined && selectedLetter.factSummary.waypointCount > 0 && <span>路标 {selectedLetter.factSummary.waypointCount} 个</span>}
-            {selectedLetter.factSummary.primaryDirection && <span>{selectedLetter.factSummary.primaryDirection}</span>}
-          </div></div>
-        )}
-        <div className="mail-letter-foot">
-          <span className={`mail-seal-standalone ${readIds.has(selectedLetter.id) && selectedLetter.id !== sealJustBroke ? 'broken' : 'intact'} ${selectedLetter.id === sealJustBroke ? 'breaking' : ''}`} aria-label={readIds.has(selectedLetter.id) ? '已破蜡封' : '未读蜡封'} />
-          <span className="mail-stamp" aria-label="邮戳" />
-        </div>
-        {letterInteraction}
-        {showObsLink && <div className="mail-obs-link"><button className="text-button" onClick={() => onNavigate?.('observatory')}><Icon name="star" size={13} /> {observatoryLinkLabel(selectedLetter)}</button></div>}
-      </>) : <div className="mail-empty mail-empty-letter">从左边选一封信来读吧。</div>}
+      <div className="mail-empty mail-empty-letter">这里暂时没有信。<br />远方的风，会带来下一封消息。</div>
     </div>
   )
 
@@ -244,13 +413,13 @@ export function PostOfficePage({ onNavigate }: PostOfficePageProps) {
       <div className="mail-header-foreground" data-asset-placeholder="counter" />
       <div className="mail-header-text">
         <div className="mail-header-title"><span className="eyebrow">POST OFFICE</span><h1>天使邮局</h1><p className="mail-header-season">盛夏 · 窗边吹来一点暖风</p></div>
-        <div className="mail-header-hint">{hasUnread ? '有一封信刚刚放进了你的木格。' : '今天的邮袋已经整理好了。'}</div>
+        <div className="mail-header-hint">{isFirstVisit ? '邮局的灯刚刚亮起。木格里还没有太多信件，但小天使每天傍晚都会来这里看看。也许下一封信，正在路上。' : hasUnread ? '有一封信刚刚放进了你的木格。' : '今天的邮袋已经整理好了。'}</div>
       </div>
     </div>
     <div className="mail-workspace">
       <div className="mail-cubby-col mail-cubby-narrow-hide">{cubbyPanel}</div>
       <div className="mail-desk-col mail-desk-narrow-full">
-        <button className="text-button mail-back-btn" onClick={() => setSelectedId(null)}>← 回到信件列表</button>
+        <button className="text-button mail-back-btn" onClick={() => { playUISound('select'); setSelectedId(null); dispatch({ type: 'SET_PO_ZONE', poZone: 'letters' }) }}>← 回到信件列表</button>
         <div className="mail-desk">{letterPaper}</div>
       </div>
     </div>

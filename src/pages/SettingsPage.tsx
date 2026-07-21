@@ -3,29 +3,52 @@ import { Icon } from '../components/Icon'
 import { useApp } from '../context/AppContext'
 import { friendlyError } from '../lib/format'
 
-const ACCENTS = ['#8b9cff', '#79d8b5', '#f4bd70', '#e98aa6', '#77bdfb', '#bc91ef']
-
 export function SettingsPage() {
   const { refresh, notify } = useApp()
   const [name, setName] = useState('')
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('gpt-5.6-luna')
   const [proxyUrl, setProxyUrl] = useState('')
-  const [accent, setAccent] = useState('#8b9cff')
   const [hasKey, setHasKey] = useState(false)
   const [apiKey, setApiKey] = useState('')
   const [busy, setBusy] = useState(false)
+  const [birthMonth, setBirthMonth] = useState(0)
+  const [birthDay, setBirthDay] = useState(0)
+  const [birthUpdatedAt, setBirthUpdatedAt] = useState(0)
+  const [birthCooldown, setBirthCooldown] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
+
   useEffect(() => {
-    window.growthArc.settings.get().then((data) => {
-      setName(String(data.user_name || '学习者')); setProvider(String(data.api_provider || 'openai')); setModel(String(data.model || 'gpt-5.6-luna')); setProxyUrl(String(data.proxy_url || '')); setAccent(String(data.accent || '#8b9cff')); setHasKey(Boolean(data.hasApiKey))
+    Promise.all([
+      window.growthArc.settings.get(),
+      window.growthArc.settings.getBirthday(),
+    ]).then(([data, bday]) => {
+      setName(String(data.user_name || '学习者')); setProvider(String(data.api_provider || 'openai')); setModel(String(data.model || 'gpt-5.6-luna')); setProxyUrl(String(data.proxy_url || '')); setHasKey(Boolean(data.hasApiKey))
+      setBirthMonth(bday.month || 0); setBirthDay(bday.day || 0); setBirthUpdatedAt(bday.updatedAt || 0)
+      if (bday.updatedAt) setBirthCooldown(Date.now() - bday.updatedAt < 365 * 86400000)
+      if (data.user_name) setNameSaved(true)
     }).catch((error) => notify(friendlyError(error), 'error'))
   }, [notify])
+
+  const saveBirthday = async () => {
+    setBusy(true)
+    try {
+      const result = await window.growthArc.settings.setBirthday(birthMonth, birthDay)
+      setBirthUpdatedAt(result.updatedAt)
+      setBirthCooldown(true)
+      notify('旅人生日已记录。小天使会在每年这一天送来祝福。', 'success')
+    } catch (error: any) {
+      if (error?.code === 'BIRTHDAY_COOLDOWN') notify('一年内只能修改一次生日。', 'error')
+      else notify(friendlyError(error), 'error')
+    }
+    finally { setBusy(false) }
+  }
 
   const saveProfile = async () => {
     setBusy(true)
     try {
-      await window.growthArc.settings.set({ user_name: name, model, accent, proxy_url: proxyUrl, api_provider: provider })
-      document.documentElement.style.setProperty('--accent', accent)
+      await window.growthArc.settings.set({ user_name: name, model, proxy_url: proxyUrl, api_provider: provider })
+      setNameSaved(true)
       notify('个性设置已保存', 'success'); await refresh()
     } catch (error) { notify(friendlyError(error), 'error') }
     finally { setBusy(false) }
@@ -42,11 +65,12 @@ export function SettingsPage() {
   }
 
   return <div className="page settings-page">
-    <header className="page-heading"><div><span className="eyebrow">PREFERENCES</span><h1>让它更像你的空间。</h1><p>学习数据只留在这台电脑；只有你主动生成 AI 报告时才会发送当期数据。</p></div></header>
+    <header className="page-heading"><div><span className="eyebrow">TRAVELER'S JOURNAL</span><h1>旅人手册</h1><p>你的资料与旅途记录。学习数据只留在这台电脑。</p></div></header>
     <div className="settings-stack">
-      <section className="panel settings-section"><header><div className="setting-icon"><Icon name="spark" /></div><div><h2>个人档案</h2><p>这些信息只用于本地界面和角色展示。</p></div></header><div className="settings-form"><label>显示名称<input value={name} onChange={(event) => setName(event.target.value)} /></label><fieldset className="color-picker"><legend>主题强调色</legend>{ACCENTS.map((item) => <button key={item} className={accent === item ? 'active' : ''} style={{ background: item }} onClick={() => setAccent(item)} aria-label={item} />)}</fieldset><button className="button button-primary align-end" disabled={busy || !name.trim()} onClick={saveProfile}>保存档案</button></div></section>
-      <section className="panel settings-section"><header><div className="setting-icon"><Icon name="brain" /></div><div><h2>OpenAI 学习报告</h2><p>使用 Responses API 生成结构化日评和周报；API 使用独立计费。</p></div><span className={`status-pill ${hasKey ? 'connected' : ''}`}>{hasKey ? '已配置' : '未配置'}</span></header><div className="settings-form ai-settings"><label>API 提供商<select value={provider} onChange={(event) => { const v = event.target.value; setProvider(v); setModel(v === 'deepseek' ? 'deepseek-chat' : 'gpt-5.6-luna') }}><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option></select><small>切换提供商会自动调整默认模型</small></label><label>模型名称<input value={model} onChange={(event) => setModel(event.target.value)} placeholder="gpt-5.6-luna" /><small>默认选择低成本模型；如不可用，可填写你账户有权使用的模型。</small></label><label>代理地址（可选）<input value={proxyUrl} onChange={(event) => setProxyUrl(event.target.value)} placeholder="http://127.0.0.1:7897" /><small>如果直连 OpenAI API 失败，可填写本地代理地址。留空则不使用代理。</small></label><label>OpenAI API Key<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? '已安全保存；输入新值可替换' : 'sk-…'} /><small>密钥由 Windows DPAPI 加密，不进入数据库、前端状态持久化或日志。</small></label><div className="button-row">{hasKey && <button className="button button-danger-ghost" onClick={clearKey}>删除密钥</button>}<button className="button button-secondary" disabled={busy || !apiKey.trim()} onClick={saveKey}>安全保存密钥</button><button className="button button-primary" disabled={busy || !model.trim()} onClick={saveProfile}>保存模型设置</button></div></div></section>
-      <section className="panel settings-section"><header><div className="setting-icon"><Icon name="folder" /></div><div><h2>本地数据</h2><p>SQLite 数据库位于应用专用目录。首版不上传、不同步、不自动备份。</p></div></header><div className="data-boundary"><div><strong>你始终拥有原始数据文件</strong><span>需要自行备份时，可关闭应用后复制整个目录。</span></div><button className="button button-secondary" onClick={() => window.growthArc.settings.openDataFolder()}><Icon name="folder" size={16} />打开数据目录</button></div></section>
+      <section className="panel settings-section"><header><div><h2>✦ 旅人档案</h2><p>这张卡片记录着你在边境的身份。</p></div></header><div className="settings-form"><div className="traveler-card"><div className="traveler-card-name"><span className="traveler-card-label">旅人之名</span><input value={name} onChange={(event) => { setName(event.target.value); setNameSaved(false) }} placeholder="学习者" /></div></div>{!nameSaved && <button className="button button-primary align-end" disabled={busy || !name.trim()} onClick={saveProfile}>保存</button>}{nameSaved && <p style={{color:'var(--muted)',fontSize:12,margin:'6px 0 0'}}>名字已经记录 ✓</p>}</div></section>
+      <section className="panel settings-section"><header><div><h2>✦ 旅人生日</h2><p>小天使会在每年这一天寄来祝福。</p></div></header><div className="settings-form">{birthUpdatedAt > 0 ? (<><p style={{fontSize:18,color:'var(--ink)',fontFamily:'Fusion Pixel SC, monospace',margin:'4px 0'}}>{birthMonth}月{birthDay}日</p>{birthCooldown && <small style={{color:'var(--muted)'}}>距离下次可修改还有 {Math.max(0, Math.ceil((birthUpdatedAt + 365*86400000 - Date.now()) / 86400000))} 天。</small>}<button className="button button-ghost align-end" disabled={busy || birthCooldown} onClick={() => { setBirthCooldown(false); setBirthUpdatedAt(0) }}>修改生日</button></>) : (<><p style={{color:'var(--muted)',fontSize:13,margin:'4px 0'}}>记录你的生日，小天使会在那一天送来祝福。</p><div style={{display:'flex',gap:10,alignItems:'center'}}><label style={{flex:1}}>月<input type="number" min={1} max={12} value={birthMonth || ''} onChange={e => setBirthMonth(Number(e.target.value))} placeholder="5" /></label><label style={{flex:1}}>日<input type="number" min={1} max={31} value={birthDay || ''} onChange={e => setBirthDay(Number(e.target.value))} placeholder="12" /></label></div><button className="button button-primary align-end" disabled={busy || !birthMonth || !birthDay} onClick={saveBirthday}>记录生日</button></>)}</div></section>
+      <section className="panel settings-section"><header><div><h2>✦ 小天使的信</h2><p>小天使每天都会整理你的旅途。不需要做任何设置。</p>{hasKey && <p style={{fontSize:12,color:'var(--muted)',margin:'4px 0 0'}}>信笺钥匙已配置 · 小天使可以亲手写信</p>}</div></header><div className="settings-form"><details style={{fontSize:13,color:'var(--muted)',cursor:'pointer'}}><summary style={{marginBottom:8}}>如果想让远方的信使帮助小天使写下更特别的信……</summary><div className="ai-settings" style={{marginTop:8}}><label>信使<select value={provider} onChange={(event) => { const v = event.target.value; setProvider(v); if (v === 'deepseek') setModel('deepseek-chat'); else if (v === 'openai') setModel('gpt-5.6-luna') }}><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option><option value="custom">自定义地址</option></select><small>在 DeepSeek 官网注册后可以获得一把钥匙。费用很低。</small></label>{provider === 'custom' && <label>自定义地址<input value={proxyUrl} onChange={(event) => setProxyUrl(event.target.value)} placeholder="https://your-api.example.com/v1" /></label>}<label>信笺钥匙<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasKey ? '已安全保存；输入新值可替换' : '输入钥匙…'} /><small>保存在你的电脑上，使用 Windows 安全加密。</small></label><div className="button-row">{hasKey && <button className="button button-danger-ghost" onClick={clearKey}>移除钥匙</button>}<button className="button button-primary" disabled={busy || !apiKey.trim()} onClick={saveKey}>{hasKey ? '更换钥匙' : '保存钥匙'}</button>{hasKey && <button className="button button-ghost" disabled={busy} onClick={async () => { setBusy(true); try { const r = await window.growthArc.mail.testLetter(); if (r.success) notify('小天使收到了一张试写的信纸。从今天开始，她可以帮你整理特别的信件了。', 'success'); else notify('小天使暂时没有收到回应。\n请检查信笺钥匙是否正确，或者稍后再试。', 'error'); } catch (e: any) { notify('小天使暂时没有收到回应。请稍后再试。', 'error'); } finally { setBusy(false) } }}>请小天使试写一封信</button>}</div></div></details></div></section>
+      <section className="panel settings-section"><header><div><h2>本地数据</h2><p>SQLite 数据库位于应用专用目录。首版不上传、不同步、不自动备份。</p></div></header><div className="data-boundary"><div><strong>你始终拥有原始数据文件</strong><span>需要自行备份时，可关闭应用后复制整个目录。</span></div><button className="button button-secondary" onClick={() => window.growthArc.settings.openDataFolder()}><Icon name="folder" size={16} />打开数据目录</button></div></section>
       <section className="privacy-note"><Icon name="spark" /><div><strong>温和反馈原则</strong><p>系统不会因为断档扣除经验、清零进度或发送催促学习通知。休息本身不是失败。</p></div></section>
     </div>
   </div>

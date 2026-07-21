@@ -172,25 +172,27 @@ function hashSeed(input) {
 
 // ── Subject generation ──────────────────────────────────────
 
-const DAILY_SUBJECTS_NORMAL = ['今天留下的足迹', '炉火旁整理好的记录', '今天走过的这一段']
-const DAILY_SUBJECTS_SHORT = ['一段短短的归程', '今天留下的小路标']
-const DAILY_SUBJECTS_REVIEW_ONLY = ['记下的一句话', '天文台留下的字句']
-const WEEKLY_SUBJECTS = ['这一周整理好的道路记录', '从周一到周日的来信']
+function formatMd(ts) {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
 
 function generateLocalLetterSubject(type, facts, seedInput) {
-  const seed = hashSeed(seedInput)
   if (type === 'daily') {
-    const counts = facts.sessionCounts || {}
-    const hasSession = (counts.short + counts.expedition + counts.deep) > 0
-    const onlyReview = !hasSession && facts.hasWrittenReview
-    if (onlyReview) return DAILY_SUBJECTS_REVIEW_ONLY[seed % DAILY_SUBJECTS_REVIEW_ONLY.length]
-    if (hasSession) return DAILY_SUBJECTS_NORMAL[seed % DAILY_SUBJECTS_NORMAL.length]
-    return DAILY_SUBJECTS_SHORT[seed % DAILY_SUBJECTS_SHORT.length]
+    return `${formatMd(facts.periodStart)}的星页`
   }
-  const weeks = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月']
-  const d = new Date(facts.periodStart)
-  const label = `${weeks[d.getMonth()]}第${Math.ceil(d.getDate() / 7)}周`
-  return seed % 3 === 0 ? `${label}的信` : WEEKLY_SUBJECTS[seed % WEEKLY_SUBJECTS.length]
+  // Weekly short: "7月13日—7月19日 · 旅途札记"
+  const weekEnd = facts.periodStart + 6 * 86400000
+  return `${formatMd(facts.periodStart)}—${formatMd(weekEnd)} · 旅途札记`
+}
+
+function generateWeeklyFullTitle(periodStart) {
+  const weekEnd = periodStart + 6 * 86400000
+  return `${formatMd(periodStart)}—${formatMd(weekEnd)}的旅途札记`
+}
+
+function weeklyDeliveryLabel(periodEnd) {
+  return `小天使整理于${formatMd(periodEnd)}`
 }
 
 // ── Template generation ─────────────────────────────────────
@@ -213,55 +215,311 @@ function neutralCompare(curr, prev) {
     : `比上周少记录了 ${formatDurationZh(Math.abs(diff))}`
 }
 
-function topDirection(facts) {
-  const d = facts.directionBreakdown && facts.directionBreakdown[0]
-  return d ? ` ${d.name}` : ''
+// ── Narrative templates ──────────────────────────────────────
+// Database facts → 小天使 narrative expression.
+// 禁止: 数字、统计、数据库字段名（编程/学习/任务/专注等）、报告语言
+// 允许: 季节、天气、路标、方向（自然意象）、邮局、小镇、炉火、旅途
+
+// ── 小天使人格 ─────────────────────────────────────────────
+// 名字: 没有提过。旅人叫她"小天使"就可以了。
+// 住處: 邮局二楼朝西的小房间。窗台上有一盆叫不出名字的花，
+//       是去年春天莉娅（制图师）路过时顺手放的。
+// 日常: 天刚暗下来的时候开始整理信件。先按木格排好，
+//       再一封一封盖邮戳、封蜡。蜡封的颜色看心情选，
+//       偶尔会盖歪——但从来不重新盖。
+// 细节: 邮袋对她来说有点大，拖在地上的时候比背起来多。
+//       柜台上那盏灯的灯油是奥伦（旅店老板）每个月分给她的。
+//       有时候艾达（木匠）会来帮她修松动的窗框。
+// 语气: 安静、细致。不说"你应该"，只说"我看见了"。
+//       不评价，不鼓励。只是告诉旅人: 你走过的路，有人记得。
+
+// ── World vocabulary ────────────────────────────────────────
+// 环境: 石板路、松风林、白石河谷、旧望丘陵、灯塔、集市、城门外
+// 天气: 晴、细雪、薄雾、微风、蝉鸣、霜降、雨后、晴朗夜空
+// 邮局: 木格信匣、蜡封、邮戳、邮袋、窗台的花、柜台上的灯
+// 小屋: 壁炉、窗外的路、门廊、行囊、地图、木匣
+
+function weatherNote(season, seed) {
+  const notes = {
+    '春': ['雨后石板路还有点湿。', '风里带着一点泥土的味道。', '窗外刚下过一阵小雨，空气很干净。'],
+    '夏': ['傍晚的风从河谷吹来，带着一点凉意。', '窗外的蝉鸣渐渐小了。', '邮局窗台上的花又开了两朵。'],
+    '秋': ['风从旧望丘陵那边吹过来。', '集市那边飘来烤面包的味道。', '傍晚有些凉了，灯点得比平时早。'],
+    '冬': ['壁炉里的火烧得很安静。', '窗外飘了一点细雪。', '石板上结了薄薄的霜，踩上去有细碎的声响。'],
+  }
+  const pool = notes[season] || notes['春']
+  return pool[(seed || 0) % pool.length]
 }
+
+// ── Lightweight World State ───────────────────────────────────
+// Pure function of periodKey. No database. Deterministic.
+// Returns structured state → angelDetail renders narrative text.
+// Extensible: add NPCs, events, locations via new keys in the state object.
+
+function daysSinceEpoch(periodKey) {
+  return Math.floor(new Date(periodKey).getTime() / 86400000)
+}
+
+/**
+ * getWorldState(periodKey) → structured world snapshot
+ *
+ * Future extensions (no code changes needed in callers):
+ *   state.npcs.oren.lastSeen
+ *   state.npcs.lia.mapProgress
+ *   state.locations.pinewood.rumors
+ *   state.activeEvents.push({ type: 'merchant_arrival', daysRemaining: 3 })
+ *   state.weather.today / state.weather.tomorrow
+ */
+function getWorldState(periodKey) {
+  const days = daysSinceEpoch(periodKey)
+  const d = new Date(days * 86400000)
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const season = seasonForDate(d)
+
+  // ── Locations ───────────────────────────────────────────
+  const windowCycle = days % 120
+  let windowPhase
+  if (windowCycle < 10)       windowPhase = 'intact'
+  else if (windowCycle < 14)  windowPhase = 'creaking'
+  else if (windowCycle < 16)  windowPhase = 'ada_coming'
+  else if (windowCycle < 20)  windowPhase = 'fixed'
+  else                        windowPhase = 'intact'
+
+  const postOfficeDecorated = (month === 11 && day >= 7 && day <= 16)
+  const isFestivalStart = (month === 11 && day === 7)
+  const isFestivalClimax = (month === 11 && day === 16)
+
+  // ── Flora ───────────────────────────────────────────────
+  let flowerPhase
+  if (month >= 10 || month <= 2) {
+    flowerPhase = 'dormant'
+  } else {
+    const flowerCycle = days % 180
+    if (flowerCycle < 20)       flowerPhase = 'sprouting'
+    else if (flowerCycle < 45)  flowerPhase = 'growing'
+    else if (flowerCycle < 100) flowerPhase = 'blooming'
+    else if (flowerCycle < 120) flowerPhase = 'wilting'
+    else                        flowerPhase = 'sprouting' // cycle restarts
+  }
+
+  // ── NPCs ────────────────────────────────────────────────
+  const adaDaysSince = windowCycle < 20 ? (windowCycle >= 16 ? days % 4 : 0) : 999
+  const npcs = {
+    ada: {
+      status: windowCycle >= 14 && windowCycle < 20 ? 'visiting' : 'idle',
+      lastInteractionDaysAgo: adaDaysSince,
+    },
+  }
+
+  // ── Visitors ────────────────────────────────────────────
+  const visitorCycle = days % 45
+  let visitor
+  if (visitorCycle === 10)      visitor = { type: 'traveler', detail: 'traveler_at_door' }
+  else if (visitorCycle === 25) visitor = { type: 'cat', detail: 'cat_on_cobblestone' }
+  else if (visitorCycle === 38) visitor = { type: 'caravan', detail: 'caravan_asking_directions' }
+  else                          visitor = null
+
+  // ── Active events (extensible) ──────────────────────────
+  const activeEvents = []
+  if (postOfficeDecorated) {
+    activeEvents.push({
+      type: 'returning_lights',
+      phase: isFestivalStart ? 'start' : isFestivalClimax ? 'climax' : 'ongoing',
+    })
+  }
+
+  return {
+    days,
+    season,
+    locations: {
+      postOffice: { windowPhase, decorated: postOfficeDecorated },
+    },
+    flora: { flowerPhase },
+    npcs,
+    visitor,
+    activeEvents,
+  }
+}
+
+// ── World state → narrative text ──────────────────────────────
+
+function worldStateDetail(state, seed) {
+  const pool = []
+
+  // Window
+  const winTexts = {
+    intact:     '窗框很安静。自从上次修好之后就一直好好的。',
+    creaking:   '窗框今天又吱了一声。不太响，就是风从河谷吹过来的时候。',
+    ada_coming: '艾达说这两天过来看看窗框。她上次说木头干了就会响，不是坏了。',
+    fixed:      '艾达今天来把窗框紧了一下。她说螺丝有点松，现在没事了。',
+  }
+  if (winTexts[state.locations.postOffice.windowPhase]) {
+    pool.push(winTexts[state.locations.postOffice.windowPhase])
+  }
+
+  // Flower
+  const flowerTexts = {
+    dormant:   '窗台上的花在过冬。枝干还在，只是没有叶子。莉娅说春天会再开的。',
+    sprouting: '花盆里冒出了一点新芽。去年莉娅留下的那株，又活过来了。',
+    growing:   '花茎长高了不少。叶子也比上周多了几片。',
+    blooming:  seed % 2 === 0
+      ? '窗台上的花开了一朵。颜色比去年那朵浅一点。'
+      : '花还在开着。有一片花瓣落在了窗台上，我没舍得扫。',
+    wilting:   '花开始谢了。花瓣一片一片落在花盆边上。',
+  }
+  if (state.flora.flowerPhase !== 'dormant' || seed % 4 === 0) {
+    pool.push(flowerTexts[state.flora.flowerPhase] || '')
+  }
+
+  // Festival
+  if (state.locations.postOffice.decorated) {
+    const evt = state.activeEvents.find(e => e.type === 'returning_lights')
+    if (evt?.phase === 'start')  pool.push('今天镇上开始挂灯了。我在邮局门口也挂了一盏小的。节期开始了。')
+    else if (evt?.phase === 'climax') pool.push('今晚是归灯夜。从窗边能看到广场上的大提灯。很安静，也很亮。')
+    else pool.push('外面的灯还亮着。节期还没结束。邮局里也比平时暖和一点。')
+  }
+
+  // Visitor
+  if (state.visitor) {
+    const vTexts = {
+      traveler_at_door: '今天有个旅人在邮局门口站了很久，看了看地图，又往松风林的方向走了。',
+      cat_on_cobblestone: '楼下石板路上有猫走过，影子从窗边晃了一下。不是第一次了。',
+      caravan_asking_directions: '从河谷那边来了几个商队的人。他们问起旧望丘陵的路，我给他们指了方向。',
+    }
+    pool.push(vTexts[state.visitor.detail] || '')
+  }
+
+  // Mailbag on Mondays
+  if (new Date(state.days * 86400000).getDay() === 1) {
+    pool.push('邮袋今天特别沉。周末积了不少信，我拖了好一段才拖到柜台上。')
+  }
+
+  // Always-available
+  pool.push('今天邮戳差点盖歪了，不过我觉得歪一点也挺好的。')
+  pool.push('蜡封用的是今天新熔的那块，颜色很深。')
+
+  return pool[(seed || 0) % pool.length]
+}
+
+function angelDetail(periodKey, seed) {
+  const state = getWorldState(periodKey)
+  const text = worldStateDetail(state, seed)
+  // Occasionally add light character moment
+  if (seed % 3 === 0) {
+    return text + '奥伦路过的时候朝邮局里看了一眼。他说灯还亮着，就知道我还没走。'
+  }
+  return text
+}
+
+// ── Daily letter (50–100字) ──────────────────────────────────
+
+function dailyNoSessionLines(seed) {
+  const lines = [
+    '今天安安静静的。我在邮局擦了一遍你的木格。明天见。',
+    '今天没有走远，但傍晚的时候我还是把你的信匣打开了——万一呢。明天见。',
+    '这一小段路很短。不过行囊放在门廊上，看起来也像在等明天。',
+  ]
+  return lines[seed % lines.length]
+}
+
+const DAILY_POOL = [
+  '今天有好几个路标。石板路走到尽头的时候，城门已经亮起了灯。',
+  '今天在地图上添了几笔。我对着灯光看了很久——这条路越来越像你的了。',
+  '今天的路走得很远。我整理邮袋的时候，特地把你的信匣摆正了一点。',
+  '回来的时候壁炉已经生好了。今天路上的事，我都帮你记下了。',
+  '我在窗边坐了一会儿，看着城门的方向。今天又走了不少路吧。',
+  '今天给这封信盖邮戳的时候，蜡封的颜色很配窗外的天色。',
+  '柜台上那盏灯一直亮着。我把今天收进木匣的时候，钟刚好敲了一下。',
+  '集市那边今天很热闹，但你还是没有绕路。一直走到了要去的地方。',
+  '今天走过的地方，有一些我没见过的路标。地图越来越丰富了。',
+  '邮局今天来了几个远方的人，但他们要找的不是这里。我继续整理你的信札。',
+]
 
 function generateDailyTemplate(facts, seedInput) {
   const seed = hashSeed(seedInput)
   const hasSession = facts.totalActiveSeconds > 0
-  const secs = facts.totalActiveSeconds || 0
-  const tasks = facts.completedTasks || []
-  const parts = []
+  const season = seasonForDate(new Date(facts.periodStart || Date.now()))
+
   if (!hasSession && facts.hasWrittenReview) {
-    parts.push('天文台留下了一句话。')
-    parts.push('今天有一段记录被收好。')
-    return parts.join('')
+    return '天文台留下了一句话。今天有一段记录被收好。'
   }
   if (!hasSession) {
-    const pick = seed % 3
-    if (pick === 0) parts.push('今天没有走远。')
-    else if (pick === 1) parts.push('这一小段路很短，但发生的事情已经记下了。')
-    else parts.push('这段记录很短。不过它也是旅途的一部分。')
-    if (tasks.length) parts.push(`抵达了 ${tasks.length} 个路标。`)
-    parts.push('明天见。')
-    return parts.join('')
+    return dailyNoSessionLines(seed)
   }
-  parts.push(`今天共专注 ${formatDurationZh(secs)}。`)
-  if (tasks.length) parts.push(`完成了 ${tasks.length} 个路标。`)
-  const dir = topDirection(facts)
-  if (dir) parts.push(`主要的方向是${dir}。`)
-  parts.push(seed % 2 === 0 ? '炉火旁安静地收好今天。' : '小屋的灯还亮着。明天见。')
+
+  const periodKey = facts.periodKey || ''
+  const parts = []
+  if (seed % 5 === 0) parts.push(angelDetail(periodKey, seed))
+  else if (seed % 3 === 0) parts.push(weatherNote(season, seed))
+  parts.push(DAILY_POOL[seed % DAILY_POOL.length])
   return parts.join('')
 }
 
+// ── Weekly letter (100–200字) ────────────────────────────────
+
+const WEEKLY_OPENINGS = [
+  '七天过去了。我把这一周的信札从木格里拿出来，按日期排好。',
+  '一周的旅途札记收在这里。今晚邮局的灯点得很晚。',
+  '这一周走了不少路。我把地图铺在柜台上，灯油快烧完的时候才看完。',
+  '今天傍晚邮局的钟敲了七下。我坐下来整理这些的时候，外面已经安静了。',
+]
+
+const WEEKLY_FIRST = [
+  '这是旅途的第一封周报。地图上的路才刚刚开始，但已经可以辨认出方向了。',
+  '第一次给你写周报。邮袋拖过来的时候差点绊了一下。不过没关系，以后会越来越熟练的。',
+]
+
+const WEEKLY_LONGER = [
+  '比上周走得更远了一些。你的木格比上周又沉了一点。',
+  '路比上周长了不少。我在整理札记的时候，多翻了几页才记完。',
+]
+
+const WEEKLY_SHORTER = [
+  '这周走的路比上周短些。不过每一段我都记得很清楚。',
+  '路比上周短了一点。起风的时候走慢些，看到的反而更多。',
+]
+
+const WEEKLY_SAME = [
+  '和上周的节奏差不多。路上的风景却不太一样。',
+  '和上周走了差不多的路。但方向好像偏了一点——也许是风的关系。',
+]
+
+const WEEKLY_CLOSINGS = [
+  '我把这些收进了木匣。下周这个时候，邮局的灯还会亮着。',
+  '旅途编年史又厚了一页。我把这一周的信札放好，下周见。',
+  '愿新的一周路上有风，炉火不熄。',
+  '邮局的灯还亮着，你的木格也还空着一格——留给下周。',
+]
+
 function generateWeeklyTemplate(facts, seedInput) {
   const seed = hashSeed(seedInput)
+  const hasPrevWeek = (facts.previousPeriodTotalSeconds || 0) > 0
+  const diff = facts.totalActiveSeconds - (facts.previousPeriodTotalSeconds || 0)
+  const season = seasonForDate(new Date(facts.periodStart || Date.now()))
   const parts = []
-  parts.push(`本周共专注 ${formatDurationZh(facts.totalActiveSeconds)}。`)
-  const diff = neutralCompare(facts.totalActiveSeconds, facts.previousPeriodTotalSeconds || 0)
-  parts.push(diff + '。')
-  const { brief = 0, short = 0, expedition = 0, deep = 0 } = facts.sessionCounts || {}
-  if (expedition + deep > 0) parts.push(`${expedition + deep} 次正式远征，`)
-  if (short > 0) parts.push(`${short} 次短程归来，`)
-  if (brief > 0 && expedition + deep + short === 0) parts.push('几次短途折返，')
-  if (facts.completedTasks && facts.completedTasks.length) {
-    parts.push(`完成了 ${facts.completedTasks.length} 个路标。`)
+
+  parts.push(WEEKLY_OPENINGS[seed % WEEKLY_OPENINGS.length])
+
+  if (!hasPrevWeek) {
+    parts.push(WEEKLY_FIRST[seed % WEEKLY_FIRST.length])
+  } else if (diff > 1800) {
+    parts.push(WEEKLY_LONGER[seed % WEEKLY_LONGER.length])
+  } else if (diff < -1800) {
+    parts.push(WEEKLY_SHORTER[seed % WEEKLY_SHORTER.length])
+  } else {
+    parts.push(WEEKLY_SAME[seed % WEEKLY_SAME.length])
   }
-  const dir = topDirection(facts)
-  if (dir) parts.push(`投入最多的方向是${dir}。`)
-  parts.push(seed % 2 === 0 ? '把这些整理好放进旅途编年史里。新的一周也请多指教。' : '一周的足迹已经归档。愿新的星期带来安静的专注。')
+
+  // Low-probability detail
+  const periodKey = facts.periodKey || ''
+  if (seed % 7 === 0) {
+    parts.push(angelDetail(periodKey, seed))
+  } else if (seed % 4 === 0) {
+    parts.push(weatherNote(season, seed))
+  }
+
+  parts.push(WEEKLY_CLOSINGS[seed % WEEKLY_CLOSINGS.length])
+
   return parts.join('')
 }
 
@@ -269,43 +527,79 @@ function generateWeeklyTemplate(facts, seedInput) {
 
 function buildDailyLetterFacts(stats, period) {
   return {
-    schemaVersion: 1,
-    periodType: 'daily',
-    periodStart: period.periodStart,
-    periodEnd: period.periodEnd,
-    timezoneName: period.timezoneName,
-    timezoneOffsetMinutes: period.timezoneOffsetMinutes,
-    totalActiveSeconds: stats.totalActiveSeconds,
-    sessionCounts: stats.sessionCounts,
-    completedTasks: (stats.completedTasks || []).map(t => ({ id: t.id, title: t.title })),
-    directionBreakdown: (stats.directionBreakdown || []).map(d => ({ id: d.id, name: d.name, color: d.color, seconds: d.seconds })),
-    longestSessionSeconds: stats.longestSessionSeconds || 0,
-    hasOutcome: stats.hasOutcome === true,
-    hasWrittenReview: stats.hasWrittenReview === true,
-    hasWorldEvent: false,
-    hasSpecialEvent: false,
+    schemaVersion: 2,
+    letterType: 'daily',
+    period: {
+      periodKey: period.periodKey,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      timezoneName: period.timezoneName,
+      timezoneOffsetMinutes: period.timezoneOffsetMinutes,
+    },
+    stats: {
+      totalActiveSeconds: stats.totalActiveSeconds,
+      sessionCounts: stats.sessionCounts,
+      completedTaskCount: (stats.completedTasks || []).length,
+      longestSessionSeconds: stats.longestSessionSeconds || 0,
+      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ name: d.name, seconds: d.seconds })),
+    },
+    journey: {
+      completedTasks: (stats.completedTasks || []).map(t => ({ title: t.title })),
+      mainDirection: (stats.directionBreakdown || [])[0]?.name || null,
+      hasOutcome: stats.hasOutcome === true,
+    },
+    observatory: {
+      hasWrittenReview: stats.hasWrittenReview === true,
+    },
+    chronicle: {
+      season: seasonForDate(new Date(period.periodStart)),
+    },
+    memory: {
+      // populated later when annual/retrospective letters are generated
+    },
   }
+}
+
+function seasonForDate(d) {
+  const m = d.getMonth() + 1
+  if (m >= 3 && m <= 5) return '春'
+  if (m >= 6 && m <= 8) return '夏'
+  if (m >= 9 && m <= 11) return '秋'
+  return '冬'
 }
 
 function buildWeeklyLetterFacts(stats, period, prevTotal) {
   return {
-    schemaVersion: 1,
-    periodType: 'weekly',
-    periodStart: period.periodStart,
-    periodEnd: period.periodEnd,
-    timezoneName: period.timezoneName,
-    timezoneOffsetMinutes: period.timezoneOffsetMinutes,
-    totalActiveSeconds: stats.totalActiveSeconds,
-    dailyActiveSeconds: stats.dailyActiveSeconds || [0, 0, 0, 0, 0, 0, 0],
-    sessionCounts: stats.sessionCounts,
-    completedTasks: (stats.completedTasks || []).map(t => ({ id: t.id, title: t.title })),
-    directionBreakdown: (stats.directionBreakdown || []).map(d => ({ id: d.id, name: d.name, color: d.color, seconds: d.seconds })),
-    longestSessionSeconds: stats.longestSessionSeconds || 0,
-    previousPeriodTotalSeconds: prevTotal || 0,
-    hasWrittenReview: stats.hasWrittenReview === true,
-    hasOutcome: stats.hasOutcome === true,
-    hasWorldEvent: false,
-    hasSpecialEvent: false,
+    schemaVersion: 2,
+    letterType: 'weekly',
+    period: {
+      periodKey: period.periodKey,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      timezoneName: period.timezoneName,
+      timezoneOffsetMinutes: period.timezoneOffsetMinutes,
+    },
+    stats: {
+      totalActiveSeconds: stats.totalActiveSeconds,
+      dailyActiveSeconds: stats.dailyActiveSeconds || [0, 0, 0, 0, 0, 0, 0],
+      sessionCounts: stats.sessionCounts,
+      completedTaskCount: (stats.completedTasks || []).length,
+      longestSessionSeconds: stats.longestSessionSeconds || 0,
+      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ name: d.name, seconds: d.seconds })),
+      previousPeriodTotalSeconds: prevTotal || 0,
+    },
+    journey: {
+      completedTasks: (stats.completedTasks || []).map(t => ({ title: t.title })),
+      mainDirection: (stats.directionBreakdown || [])[0]?.name || null,
+      hasOutcome: stats.hasOutcome === true,
+    },
+    observatory: {
+      hasWrittenReview: stats.hasWrittenReview === true,
+    },
+    chronicle: {
+      season: seasonForDate(new Date(period.periodStart)),
+    },
+    memory: {},
   }
 }
 
@@ -325,7 +619,7 @@ function buildDailyStatsForFacts(db, period) {
     "SELECT COUNT(*) AS count FROM focus_sessions WHERE status = 'completed' AND ended_at >= ? AND ended_at < ? AND outcome IS NOT NULL AND outcome != '' AND TRIM(outcome) != ''",
     [period.periodStart, period.periodEnd],
   ).count > 0
-  return { ...stats, completedTasks, hasWrittenReview, hasOutcome }
+  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, completedTasks, hasWrittenReview, hasOutcome }
 }
 
 function buildWeeklyStatsForFacts(db, period) {
@@ -349,7 +643,7 @@ function buildWeeklyStatsForFacts(db, period) {
     "SELECT COUNT(*) AS count FROM focus_sessions WHERE status = 'completed' AND ended_at >= ? AND ended_at < ? AND outcome IS NOT NULL AND outcome != '' AND TRIM(outcome) != ''",
     [period.periodStart, period.periodEnd],
   ).count > 0
-  return { ...stats, dailyActiveSeconds, completedTasks, hasWrittenReview: review ? review.count > 0 : false, hasOutcome }
+  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, dailyActiveSeconds, completedTasks, hasWrittenReview: review ? review.count > 0 : false, hasOutcome }
 }
 
 const TIME_WINDOWS = [
@@ -360,8 +654,120 @@ const TIME_WINDOWS = [
   { label: '晚间', hours: [18, 19, 20, 21, 22, 23] },
 ]
 
+// ── Festival system ──────────────────────────────────────────
+
+const FESTIVALS = {
+  returning_lights: {
+    name: '归灯节',
+    month: 11, day: 7,
+    durationDays: 10,
+    finaleDay: 10,
+    firstYear: 2025,
+    letters: [
+      { day: 1,  subtype: 'opening', subject: '灯火初燃' },
+      { day: 5,  subtype: 'midway',  subject: '旧灯回响' },
+      { day: 10, subtype: 'climax',  subject: '归灯夜' },
+    ],
+  },
+}
+
+/** Compute the UTC timestamp for a festival letter node */
+function festivalDate(festival, year, dayInFestival) {
+  const d = new Date(year, festival.month - 1, festival.day + dayInFestival - 1)
+  d.setHours(12, 0, 0, 0)
+  return d.getTime()
+}
+
+/** Return active festival letter nodes that should fire on or before `now`.
+ *  `mailStartedMs` (optional) — if set, skip festival years before the player joined. */
+function getActiveFestivalNodes(now, mailStartedMs) {
+  const nodes = []
+  const playerStartYear = mailStartedMs ? new Date(mailStartedMs).getFullYear() : 0
+  for (const [key, f] of Object.entries(FESTIVALS)) {
+    const startYear = Math.max(f.firstYear, playerStartYear || f.firstYear)
+    const currentYear = new Date(now).getFullYear()
+    for (let year = startYear; year <= currentYear; year++) {
+      for (const ld of f.letters) {
+        const ts = festivalDate(f, year, ld.day)
+        if (ts <= now) {
+          nodes.push({
+            eventType: 'festival',
+            eventKey: `${key}:${year}:${ld.subtype}`,
+            festivalKey: key,
+            year,
+            day: ld.day,
+            subtype: ld.subtype,
+            subject: ld.subject,
+            timestamp: ts,
+            periodStart: ts,
+            periodEnd: ts + 86400000,
+          })
+        }
+      }
+    }
+  }
+  return nodes
+}
+
+/** Build a simple festival letter fact object */
+function buildFestivalFacts(node) {
+  return {
+    schemaVersion: 1,
+    periodType: 'festival',
+    festivalKey: node.festivalKey,
+    year: node.year,
+    day: node.day,
+    subtype: node.subtype,
+    totalActiveSeconds: 0,
+    sessionCounts: { brief: 0, short: 0, expedition: 0, deep: 0 },
+    completedTaskCount: 0,
+  }
+}
+
+const FESTIVAL_TEMPLATES = {
+  returning_lights_opening:
+    '归灯节到了。从今天开始，镇上的灯会一盏接一盏亮起来。' +
+    '无论你此刻走到了哪里，这些灯都会一直等到归灯夜。' +
+    '这几天不必急着赶路。节期里的每一盏灯，都是为了仍在路上的人。',
+  returning_lights_midway:
+    '归灯节已经过半。街角的提灯越聚越多，旧灯和新灯混在一起，' +
+    '照亮了同一条石板路。' +
+    '走过了这么多天，无论完成了多少，每一小段路都已经被记下。',
+  returning_lights_climax:
+    '今晚是归灯夜。每一扇窗都为仍在远方的人亮着灯。' +
+    '镇上的居民聚在广场上，把最大的提灯挂在钟楼旁。' +
+    '这些灯火不会问你走了多远、完成了多少——它们只是亮着。' +
+    '等你想回来的时候，它们就在这里。',
+}
+
+function generateFestivalTemplate(subtype) {
+  const key = `returning_lights_${subtype}`
+  return FESTIVAL_TEMPLATES[key] || '归灯节的一封信。'
+}
+
+// ── Birthday system ──────────────────────────────────────────
+
+function birthdayPeriod(year, month, day) {
+  const d = new Date(year, month - 1, day, 12, 0, 0, 0)
+  return {
+    periodKey: `birthday:${year}`,
+    periodStart: d.getTime(),
+    periodEnd: d.getTime() + 86400000,
+    timezoneName: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+  }
+}
+
+function generateBirthdayTemplate() {
+  return '生日快乐。这是你在小镇度过的又一年。' +
+    '今天广场上的面包房烤了一炉蜂蜜蛋糕。' +
+    '无论你今天有没有出门远征，这份祝福都已经是你的了。' +
+    '又长大了一岁，希望你在这里的每一天都像现在这样，走在自己的路上。'
+}
+
 module.exports = {
   ACHIEVEMENTS,
+  FESTIVALS,
   focusXp,
   completionXp,
   levelFromXp,
@@ -379,6 +785,8 @@ module.exports = {
   previousWeeklyPeriod,
   hashSeed,
   generateLocalLetterSubject,
+  generateWeeklyFullTitle,
+  weeklyDeliveryLabel,
   generateDailyTemplate,
   generateWeeklyTemplate,
   buildDailyLetterFacts,
@@ -390,6 +798,13 @@ module.exports = {
   computeDailyHourly,
   computeWeeklyHeatmap,
   getDominantTimeWindow,
+  tzInfo,
+  getActiveFestivalNodes,
+  buildFestivalFacts,
+  getWorldState,
+  generateFestivalTemplate,
+  birthdayPeriod,
+  generateBirthdayTemplate,
 }
 
 function getDominantTimeWindow(hourlyData) {

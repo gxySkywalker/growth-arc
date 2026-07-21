@@ -172,9 +172,42 @@
 .mail-env{min-height:56px;padding:5px 8px 5px 6px;display:grid;grid-template-columns:48px 1fr 18px;gap:8px;align-items:center;background:rgba(42,32,22,.2);border:1px solid rgba(140,100,60,.1);cursor:pointer;text-align:left}.mail-env:hover{background:rgba(50,38,26,.3);border-color:rgba(180,140,80,.15)}.mail-env.selected{background:rgba(180,140,80,.08);border-color:#C39755;border-left:2px solid #C39755}.mail-env.unread{background:rgba(50,38,26,.35);border-left:2px solid rgba(199,147,85,.35)}
 .mail-env-visual{width:64px;height:auto;flex-shrink:0;image-rendering:pixelated;object-fit:contain;display:block;transition:transform 80ms}.selected .mail-env-visual{filter:brightness(1.1)}
 .mail-env:hover .mail-env-visual{animation:env-wobble 600ms ease-in-out infinite}
-.mail-env.opening .mail-env-visual{animation:env-open 450ms ease-out forwards;pointer-events:none}
+.mail-env.opening .mail-env-visual{animation:env-open-gba 700ms steps(1) forwards;pointer-events:none}
+.mail-env.opening{overflow:visible}
 @keyframes env-wobble{0%,100%{transform:rotate(-2.5deg)}50%{transform:rotate(2.5deg)}}
-@keyframes env-open{0%{transform:translateY(0) scale(1)}30%{transform:translateY(-3px) scale(1.02)}60%{transform:translateY(-2px) scale(1.05)}100%{transform:translateY(0) scale(1)}}
+
+/* ── Unread: subtle idle float + pixel glint ── */
+.mail-env.unread .mail-env-visual{animation:env-idle-float 2.8s ease-in-out infinite}
+.mail-env.unread{position:relative}
+.mail-env.unread::after{content:'';position:absolute;top:6px;left:10px;width:8px;height:4px;background:rgba(255,240,200,.55);transform:skewX(-15deg);animation:env-glint 2.2s steps(1) infinite;pointer-events:none;z-index:1}
+@keyframes env-idle-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes env-glint{0%,80%,100%{opacity:0}85%{opacity:1}90%{opacity:0}95%{opacity:1}}
+
+/* ── GBA-style open: shake → expand → reveal ── */
+@keyframes env-open-gba{
+  0%{transform:translateX(0)}
+  8%{transform:translateX(-3px)}
+  16%{transform:translateX(3px)}
+  24%{transform:translateX(-2px)}
+  32%{transform:translateX(0)}
+  50%{transform:translateY(-4px) scale(1.06)}
+  70%{transform:translateY(-2px) scale(1.03)}
+  85%{transform:translateY(0) scale(1)}
+  100%{transform:translateY(0) scale(1)}
+}
+
+/* ── Keyboard roster focus (RPG pixel selection highlight) ── */
+@keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0.2}}
+.kb-focused{position:relative;outline:2px solid #C39755;outline-offset:1px;transition:outline 150ms ease}
+.kb-focused::before{content:'▶';position:absolute;left:-14px;top:50%;transform:translateY(-50%);color:#C39755;font-family:'Fusion Pixel SC',monospace;font-size:9px;line-height:1;animation:cursor-blink 900ms steps(1) infinite;pointer-events:none;z-index:1}
+.sidebar nav button.kb-focused{color:#fff2d6;background:linear-gradient(90deg,rgba(201,120,61,.28),rgba(201,120,61,.08));box-shadow:inset 3px 0 #e3a25f}
+.sidebar nav button.kb-focused::before{left:-8px}
+.mail-cubby-tab.kb-focused{color:#f0e0b8;background:rgba(180,140,80,.12);border-left-color:#C39755}
+.mail-cubby-tab.kb-focused::before{left:-8px}
+.mail-env.kb-focused{background:rgba(180,140,80,.08);border-color:#C39755;border-left:2px solid #C39755}
+.mail-env.kb-focused::before{left:-12px;top:40%}
+.obs-hero-tabs button.kb-focused{outline:2px solid #C39755;outline-offset:1px;box-shadow:inset 0 0 0 1px rgba(184,138,77,.25)}
+.obs-hero-tabs button.kb-focused::before{left:-8px}
 .mail-cat-unread{width:8px;height:8px;background:#b54838;border:1px solid rgba(0,0,0,.2);flex-shrink:0}
 .mail-env-info{min-width:0;display:flex;flex-direction:column;gap:1px}
 .mail-env-subject{color:#e0d0b0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.unread .mail-env-subject{color:#f0e0c0;font-weight:700}
@@ -183,12 +216,23 @@
 
 /* Desk + Paper */
 .mail-desk{height:100%;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:12px 8px 20px;background:rgba(24,18,14,.45);border:1px solid rgba(130,90,50,.15)}
-.mail-letter-paper{width:min(100%,720px);padding:24px 28px 20px;background:#ebdcb8;border:1px solid rgba(140,110,70,.25);color:#3D2B22;font-size:14px;line-height:1.7;font-family:'Fusion Pixel SC','Courier New',monospace;overflow-y:auto;flex:1;box-shadow:2px 2px 0 rgba(80,50,30,.2)}
-.mail-letter-head{margin-bottom:14px}.mail-letter-head>div:first-child{display:flex;justify-content:space-between;align-items:baseline}
+/* ── Parchment letter paper (pixel RPG style) ── */
+.mail-letter-paper{position:relative;width:min(100%,720px);padding:28px 30px 24px;background:#ebdcb8;border:2px solid #8B6E4E;outline:1px solid #C4A87C;outline-offset:-4px;color:#3D2B22;font-size:14px;line-height:1.75;font-family:'Fusion Pixel SC','Courier New',monospace;overflow-y:auto;flex:1;image-rendering:pixelated;animation:paper-appear 250ms steps(2) both}
+/* paper inner border — pixel frame effect */
+.mail-letter-paper::before{content:'';position:absolute;inset:6px;border:1px solid rgba(180,145,100,.2);pointer-events:none;z-index:0}
+@keyframes paper-appear{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
+.mail-letter-head{position:relative;z-index:1;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(140,110,70,.18)}
+.mail-letter-sender{display:block;color:#6a4030;font-size:12px;font-weight:700;letter-spacing:.05em;margin-bottom:6px}
+.mail-letter-subject{font-size:20px;margin:0 0 8px;color:#3D2B22;font-family:'Fusion Pixel SC','Courier New',monospace;line-height:1.3}
+.mail-letter-meta{display:flex;gap:14px;align-items:baseline}
 .mail-letter-cat{color:#6a4030;font-size:11px}.mail-letter-date{color:#7a6050;font-size:11px}
-.mail-letter-sender{display:block;color:#7a6050;font-size:12px;margin-top:4px}
-.mail-letter-subject{font-size:19px;margin:6px 0 12px;color:#3D2B22;font-family:'Fusion Pixel SC','Courier New',monospace}
-.mail-letter-body{margin-bottom:12px}.mail-letter-text{white-space:pre-wrap}
+/* Body text appear — delayed fade via pixel steps */
+.mail-letter-body{position:relative;z-index:1;margin-bottom:12px}
+.mail-letter-text{white-space:pre-wrap;animation:letter-text-appear 400ms steps(1) 300ms both}
+@keyframes letter-text-appear{0%{opacity:0}100%{opacity:1}}
+/* Archive mode: no animations — instant display */
+.mail-letter-paper--archive{animation:none}
+.mail-letter-body--archive .mail-letter-text{animation:none}
 
 .mail-fact-slip{margin:12px 0;padding:7px 10px 6px 20px;width:min(92%,460px);background:#e2ceaa;border:1px solid rgba(140,110,70,.18);font-size:12px;color:#5a4535;transform:rotate(-.3deg)}.mail-fact-slip-header{color:#7a6050;font-size:10px;margin-bottom:3px;font-weight:700}.mail-fact-slip-grid{display:flex;flex-wrap:wrap;gap:4px 12px}
 
@@ -197,6 +241,17 @@
 .mail-stamp{width:20px;height:20px;border:2px solid rgba(90,60,30,.25);background:rgba(170,140,100,.08)}
 
 .mail-reply-slip{margin-top:16px;display:flex;align-items:center;gap:6px;padding:6px 8px;background:rgba(230,210,170,.2);border:1px solid rgba(140,110,70,.15)}.mail-reply-icon{color:rgba(100,70,40,.35);font-size:14px}.mail-reply-input{flex:1;min-height:32px;padding:4px 6px;color:#3D2B22;background:rgba(255,252,240,.5);border:1px solid rgba(140,110,70,.2);font-size:13px;font-family:inherit;resize:none}.mail-reply-input:focus{border-color:#C39755;outline:none}.mail-reply-saved{color:#8a7055;font-size:11px;white-space:nowrap}
+
+/* ── Traveler card (旅人手册档案卡) ── */
+.traveler-card{padding:14px 18px;background:rgba(235,215,180,.25);border:2px solid rgba(139,110,78,.3);outline:1px solid rgba(180,145,100,.15);outline-offset:-3px;font-family:'Fusion Pixel SC',monospace}
+.traveler-card-name{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.traveler-card-label{color:var(--muted);font-size:11px;white-space:nowrap}
+.traveler-card-name input{flex:1;padding:3px 8px;color:var(--ink);background:rgba(255,252,240,.5);border:1px solid rgba(140,110,70,.2);font-size:15px;font-family:inherit}
+.traveler-card-name input:focus{border-color:#C39755;outline:none}
+.traveler-card-meta{display:flex;gap:18px;flex-wrap:wrap}
+.traveler-card-item{color:var(--muted);font-size:11px;display:flex;align-items:center;gap:5px}
+.traveler-card-item i{color:#C39755;font-size:10px}
+.traveler-card-item.future{opacity:.4}
 
 .mail-obs-link{margin-top:10px;padding-top:8px;border-top:1px solid rgba(140,110,70,.12)}.mail-obs-link .text-button{color:#8a6a48}
 .mail-memory-toggle{margin-top:16px}.mail-memory-toggle .text-button{color:#8a6a48}

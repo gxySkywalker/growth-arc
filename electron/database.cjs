@@ -25,6 +25,12 @@ const {
   buildWeeklyStatsForFacts,
   shouldGenerateDailyLetter,
   shouldGenerateWeeklyLetter,
+  tzInfo,
+  getActiveFestivalNodes,
+  buildFestivalFacts,
+  generateFestivalTemplate,
+  birthdayPeriod,
+  generateBirthdayTemplate,
 } = require('./domain.cjs')
 const {
   COMPANION_SPECIES,
@@ -59,9 +65,42 @@ class StudyDatabase {
     this.db = existing ? new SQL.Database(existing) : new SQL.Database()
     this.db.run('PRAGMA foreign_keys = ON;')
     this.migrate()
+    this.runSchemaMigrations()
     this.seed()
     this.recoverStaleSession()
     return this
+  }
+
+  // ── Versioned schema migrations (run once per version) ────
+
+  runSchemaMigrations() {
+    const s = this.getSettings()
+    const version = Number(s.schema_version) || 0
+
+    if (version < 1) {
+      // V1: repair invalid letters (birthday/festival before player joined, orphans, duplicates)
+      this.repairInvalidLetters()
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '1')")
+    }
+
+    if (version < 2) {
+      // V2: migrate mail_started_at_ms → world_entered_at_ms
+      if (s.mail_started_at_ms && !s.world_entered_at_ms) {
+        this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('world_entered_at_ms', ?)", [s.mail_started_at_ms])
+      }
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '2')")
+    }
+
+    if (version < 3) {
+      // V3: AI fields for letter narrative
+      const aiCols = new Set(this.all('PRAGMA table_info(letters)').map(c => c.name))
+      if (!aiCols.has('ai_status')) this.db.run("ALTER TABLE letters ADD COLUMN ai_status TEXT NOT NULL DEFAULT 'template'")
+      if (!aiCols.has('ai_provider')) this.db.run("ALTER TABLE letters ADD COLUMN ai_provider TEXT")
+      if (!aiCols.has('ai_model')) this.db.run("ALTER TABLE letters ADD COLUMN ai_model TEXT")
+      if (!aiCols.has('ai_prompt_version')) this.db.run("ALTER TABLE letters ADD COLUMN ai_prompt_version INTEGER")
+      if (!aiCols.has('ai_retry_count')) this.db.run("ALTER TABLE letters ADD COLUMN ai_retry_count INTEGER NOT NULL DEFAULT 0")
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '3')")
+    }
   }
 
   migrate() {
@@ -305,6 +344,15 @@ class StudyDatabase {
       ai_status TEXT,
       UNIQUE(letter_type, period_key)
     )`)
+    this.db.run(`CREATE TABLE IF NOT EXISTS letter_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      event_key TEXT NOT NULL UNIQUE,
+      triggered_at INTEGER NOT NULL,
+      letter_id TEXT,
+      FOREIGN KEY (letter_id) REFERENCES letters(id) ON DELETE SET NULL
+    )`)
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_letter_events_type ON letter_events(event_type)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_letters_period ON letters(letter_type, period_start)')
     this.db.run('DROP INDEX IF EXISTS idx_letters_unread')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_letters_unread ON letters(created_at DESC) WHERE is_read = 0')
@@ -434,6 +482,15 @@ class StudyDatabase {
       this.db.run('ROLLBACK')
       throw error
     }
+  }
+
+  // ── Player timeline ───────────────────────────────────────
+  // world_entered_at_ms: when the player first entered the game world.
+  // Backward-compat: falls back to player_created_at_ms → mail_started_at_ms
+
+  worldEnteredAtMs() {
+    const s = this.getSettings()
+    return Number(s.world_entered_at_ms || s.player_created_at_ms || s.mail_started_at_ms) || 0
   }
 
   getSettings() {
@@ -1400,7 +1457,7 @@ class StudyDatabase {
 
   createLetter({ id, letterType, periodKey, periodStart, periodEnd, timezoneOffsetMinutes, timezoneName, subject, fact, templateBody }) {
     if (!id) throw new Error('信件 id 不能为空')
-    if (!['daily', 'weekly'].includes(letterType)) throw new Error('letter_type 只允许 daily 或 weekly')
+    if (!['daily', 'weekly', 'festival', 'memorial'].includes(letterType)) throw new Error('letter_type 只允许 daily / weekly / festival / memorial')
     if (!String(subject || '').trim()) throw new Error('信件标题不能为空')
     if (!String(timezoneName || '').trim()) throw new Error('时区名称不能为空')
     if (!String(templateBody || '').trim()) throw new Error('信件正文不能为空')
@@ -1413,7 +1470,7 @@ class StudyDatabase {
     try {
       this.transaction(() => {
         this.run(`INSERT INTO letters (id, letter_type, period_key, period_start, period_end, timezone_offset_minutes, timezone_name, subject, fact_json, template_body, ai_body, body_source, is_read, read_at, reply_text, created_at, updated_at, generation_version, ai_status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'template', 0, NULL, NULL, ?, ?, 1, NULL)`, [
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'template', 0, NULL, NULL, ?, ?, 1, 'pending')`, [
           id, letterType, periodKey, periodStart, periodEnd, timezoneOffsetMinutes, timezoneName,
           subject.trim(), factJson, templateBody.trim(),
           now, now,
@@ -1535,33 +1592,35 @@ class StudyDatabase {
 
   ensurePeriodicLetters(now = Date.now()) {
     const s = this.getSettings()
-    const mailStarted = Number(s.mail_started_at_ms) || 0
-    const lastDaily = s.last_daily_period_checked || ''
-    const lastWeekly = s.last_weekly_period_checked || ''
-
+    const worldEntered = this.worldEnteredAtMs()
+    const DAY = 86400000
     const d = getDailyPeriod(now)
     const w = getWeeklyPeriod(now)
-    const DAY = 86400000
 
     const result = {
-      initialized: !mailStarted,
+      initialized: !worldEntered,
       daily: { checked: 0, created: 0, skipped: 0, existing: 0 },
       weekly: { checked: 0, created: 0, skipped: 0, existing: 0 },
     }
 
-    if (!mailStarted) {
-      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('mail_started_at_ms', ?)", [String(now)])
-      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [d.periodKey])
-      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [w.periodKey])
-      return result
+    if (!worldEntered) {
+      // Set world_entered_at_ms to the day before the earliest completed session
+      const earliest = this.one("SELECT MIN(ended_at) as ts FROM focus_sessions WHERE status='completed'")
+      const startTs = earliest && earliest.ts
+        ? new Date(earliest.ts).setHours(0,0,0,0) - 86400000  // day before first session
+        : now
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('world_entered_at_ms', ?)", [String(startTs)])
     }
 
-    // Daily check — from OLDEST to newest, max 30 days
-    const dailyStart = Math.max(mailStarted, now - 30 * DAY)
-    let cursor = dailyStart
+    // ── Daily: scan from after lastDaily to today ──────────────
+    const lastDaily = s.last_daily_period_checked || ''
+    const dailyStart = lastDaily
+      ? Math.max(worldEntered, dayBounds(lastDaily).end)
+      : worldEntered
+    let cursor = Math.max(dailyStart, now - 30 * DAY)
+
     while (cursor < d.periodStart) {
       const p = getDailyPeriod(cursor)
-      if (p.periodKey <= lastDaily) { cursor = p.periodEnd; continue }
       result.daily.checked++
       const r = this.ensureLetterForPeriod({ letterType: 'daily', period: p })
       if (r.created) result.daily.created++
@@ -1569,14 +1628,19 @@ class StudyDatabase {
       else result.daily.existing++
       cursor = p.periodEnd
     }
-    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [d.periodKey])
+    // lastDaily = the most recent date actually scanned (yesterday, since today hasn't ended)
+    const yesterdayKey = localDateKey(now - DAY)
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [yesterdayKey])
 
-    // Weekly check — need full week completed
-    const weeklyStart = Math.max(mailStarted, now - 30 * DAY)
-    let wCursor = weeklyStart
+    // ── Weekly: scan from after lastWeekly to today ────────────
+    const lastWeekly = s.last_weekly_period_checked || ''
+    const weeklyStart = lastWeekly
+      ? Math.max(worldEntered, weekBounds(lastWeekly).end)
+      : worldEntered
+    let wCursor = Math.max(weeklyStart, now - 30 * DAY)
+
     while (wCursor < w.periodStart) {
       const pw = getWeeklyPeriod(wCursor)
-      if (pw.periodKey <= lastWeekly) { wCursor = pw.periodEnd; continue }
       result.weekly.checked++
       const r = this.ensureLetterForPeriod({ letterType: 'weekly', period: pw })
       if (r.created) result.weekly.created++
@@ -1584,9 +1648,378 @@ class StudyDatabase {
       else result.weekly.existing++
       wCursor = pw.periodEnd
     }
-    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [w.periodKey])
+    // lastWeekly = last fully-completed week (not current week)
+    const lastWeeklyKey = localDateKey(Math.min(now - DAY, w.periodStart - DAY))
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [lastWeeklyKey])
 
     return result
+  }
+
+  // ── Welcome letter (first visit) ─────────────────────────
+
+  ensureWelcomeLetter() {
+    const eventKey = 'welcome:first_visit'
+    const existing = this.one("SELECT id FROM letter_events WHERE event_key = ?", [eventKey])
+    if (existing) return { created: false }
+
+    const tz = tzInfo()
+    const now = Date.now()
+    const letterId = crypto.randomUUID()
+    const templateBody = [
+      '今天有人把一张新的旅途卡片放进了邮局的木格里。',
+      '我想，那应该属于你。',
+      '',
+      '我是住在邮局二楼的小天使。',
+      '平时负责整理信件、盖邮戳，',
+      '还有替旅人们收好那些容易被忘记的小事情。',
+      '',
+      '不用担心这里现在还很安静。',
+      '每当你走过一段路，',
+      '我都会替你把那些足迹收好。',
+      '',
+      '以后如果愿意，',
+      '可以常来看看。',
+      '',
+      '我会在这里。',
+    ].join('\n')
+
+    try {
+      this.createLetter({
+        id: letterId,
+        letterType: 'memorial',
+        periodKey: eventKey,
+        periodStart: now,
+        periodEnd: now + 86400000,
+        timezoneOffsetMinutes: tz.timezoneOffsetMinutes,
+        timezoneName: tz.timezoneName,
+        subject: '你好呀，旅人',
+        fact: { schemaVersion: 1, letterType: 'memorial', subtype: 'welcome' },
+        templateBody,
+      })
+      this.run("INSERT INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?,?,?,?,?)",
+        [crypto.randomUUID(), 'welcome', eventKey, now, letterId])
+      return { created: true, letterId }
+    } catch (e) {
+      if (e.code === 'LETTER_PERIOD_EXISTS') return { created: false }
+      throw e
+    }
+  }
+
+  // ── Event-driven letters (festivals, birthday) ──────────
+
+  ensureEventLetters(now = Date.now()) {
+    const result = { festival: { checked: 0, created: 0, existing: 0, repaired: 0 } }
+    const worldEnteredMs = this.worldEnteredAtMs()
+    const nodes = getActiveFestivalNodes(now, worldEnteredMs)
+
+    for (const node of nodes) {
+      result.festival.checked++
+
+      // Idempotency: check letter_events
+      const existingEvent = this.one("SELECT id, letter_id FROM letter_events WHERE event_key = ?", [node.eventKey])
+      if (existingEvent) {
+        // Verify the linked letter still exists
+        const letter = this.one("SELECT id FROM letters WHERE id = ?", [existingEvent.letter_id])
+        if (letter) { result.festival.existing++; continue }
+        // Orphan event — clean up and re-create below
+        this.run("DELETE FROM letter_events WHERE id = ?", [existingEvent.id])
+      }
+
+      // Check if letter exists (orphan letter without event)
+      const existingLetter = this.one("SELECT id FROM letters WHERE letter_type = 'festival' AND period_key = ?", [node.eventKey])
+      if (existingLetter) {
+        // Repair: letter exists but event missing → insert event record
+        this.run("INSERT INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?, ?, ?, ?, ?)",
+          [crypto.randomUUID(), node.eventType, node.eventKey, now, existingLetter.id])
+        result.festival.repaired++
+        continue
+      }
+
+      // Neither exists → create both
+      const tz = tzInfo(now)
+      const facts = buildFestivalFacts(node)
+      const templateBody = generateFestivalTemplate(node.subtype)
+      const letterId = crypto.randomUUID()
+      const eventId = crypto.randomUUID()
+
+      try {
+        // createLetter has its own transaction; just call sequentially
+        this.createLetter({
+          id: letterId,
+          letterType: 'festival',
+          periodKey: node.eventKey,
+          periodStart: node.timestamp,
+          periodEnd: node.timestamp + 86400000,
+          timezoneOffsetMinutes: tz.timezoneOffsetMinutes,
+          timezoneName: tz.timezoneName,
+          subject: node.subject,
+          fact: facts,
+          templateBody,
+        })
+        this.run("INSERT INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?, ?, ?, ?, ?)",
+          [eventId, node.eventType, node.eventKey, now, letterId])
+        result.festival.created++
+      } catch (e) {
+        if (e.code === 'LETTER_PERIOD_EXISTS') {
+          // Race condition: another call already created the letter
+          const repaired = this.one("SELECT id FROM letters WHERE letter_type = 'festival' AND period_key = ?", [node.eventKey])
+          if (repaired) {
+            this.run("INSERT OR IGNORE INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?, ?, ?, ?, ?)",
+              [eventId, node.eventType, node.eventKey, now, repaired.id])
+            result.festival.repaired++
+          } else {
+            result.festival.existing++
+          }
+        } else throw e
+      }
+    }
+    return result
+  }
+
+  ensureBirthdayLetter(now = Date.now()) {
+    const s = this.getSettings()
+    const month = Number(s.birthday_month) || 0
+    const day = Number(s.birthday_day) || 0
+    if (!month || !day) return { created: false, reason: 'no_birthday_set' }
+
+    const year = new Date(now).getFullYear()
+    const eventKey = `birthday:${year}`
+    const existing = this.one("SELECT id FROM letter_events WHERE event_key = ?", [eventKey])
+    if (existing) return { created: false, reason: 'already_generated' }
+
+    // Late delivery: allow if birthday this year has passed (or is today)
+    const birthdayThisYear = new Date(year, month - 1, day, 12).getTime()
+    if (now < birthdayThisYear) {
+      return { created: false, reason: 'before_birthday' }
+    }
+
+    // Don't generate if player joined AFTER this year's birthday
+    const worldEntered = this.worldEnteredAtMs()
+    if (worldEntered && birthdayThisYear < worldEntered) {
+      return { created: false, reason: 'before_world_entered' }
+    }
+
+    const period = birthdayPeriod(year, month, day)
+    const templateBody = generateBirthdayTemplate()
+    const facts = { schemaVersion: 1, periodType: 'memorial', subtype: 'birthday', year }
+
+    try {
+      const letterId = crypto.randomUUID()
+      this.createLetter({
+        id: letterId,
+        letterType: 'memorial',
+        periodKey: eventKey,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        timezoneOffsetMinutes: period.timezoneOffsetMinutes,
+        timezoneName: period.timezoneName,
+        subject: '写给你的生日信',
+        fact: facts,
+        templateBody,
+      })
+      this.run("INSERT INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?, ?, ?, ?, ?)",
+        [crypto.randomUUID(), 'birthday', eventKey, now, letterId])
+      return { created: true, letterId }
+    } catch (e) {
+      if (e.code === 'LETTER_PERIOD_EXISTS') return { created: false, reason: 'already_generated' }
+      throw e
+    }
+  }
+
+  // ── Birthday settings ────────────────────────────────────
+
+  getBirthdaySettings() {
+    const s = this.getSettings()
+    return {
+      month: Number(s.birthday_month) || 0,
+      day: Number(s.birthday_day) || 0,
+      updatedAt: Number(s.birthday_updated_at) || 0,
+    }
+  }
+
+  setBirthday(month, day) {
+    if (!month || !day || month < 1 || month > 12 || day < 1 || day > 31) {
+      const err = new Error('生日日期无效')
+      err.code = 'INVALID_BIRTHDAY'
+      throw err
+    }
+    const current = this.getBirthdaySettings()
+    const now = Date.now()
+    if (current.updatedAt && (now - current.updatedAt) < 365 * 86400000) {
+      const err = new Error('一年内只能修改一次生日')
+      err.code = 'BIRTHDAY_COOLDOWN'
+      throw err
+    }
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('birthday_month', ?)", [String(month)])
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('birthday_day', ?)", [String(day)])
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('birthday_updated_at', ?)", [String(now)])
+    return { month, day, updatedAt: now }
+  }
+
+  // ── Data integrity repair: remove invalid letters ──────────
+
+  repairInvalidLetters() {
+    const playerCreated = this.worldEnteredAtMs()
+    const result = { deletedBirthday: 0, deletedFestival: 0, deletedOrphanEvents: 0, deletedDuplicates: 0 }
+
+    if (playerCreated) {
+      // Delete birthday letters where the birthday date < player_created_at
+      const badBirthdays = this.all(
+        "SELECT id, period_key, period_start FROM letters WHERE letter_type IN ('festival','memorial') AND period_key LIKE 'birthday:%' AND period_start < ?",
+        [playerCreated]
+      )
+      for (const b of badBirthdays) {
+        this.run("DELETE FROM letter_events WHERE letter_id = ?", [b.id])
+        this.run("DELETE FROM letters WHERE id = ?", [b.id])
+        result.deletedBirthday++
+      }
+
+      // Delete festival letters where festival date < player_created_at
+      const badFestivals = this.all(
+        "SELECT id, period_key, period_start FROM letters WHERE letter_type='festival' AND period_key LIKE 'returning_lights:%' AND period_start < ?",
+        [playerCreated]
+      )
+      for (const f of badFestivals) {
+        this.run("DELETE FROM letter_events WHERE letter_id = ?", [f.id])
+        this.run("DELETE FROM letters WHERE id = ?", [f.id])
+        result.deletedFestival++
+      }
+    }
+
+    // Delete orphan letter_events (no matching letter)
+    const orphans = this.all(
+      "SELECT e.id FROM letter_events e WHERE NOT EXISTS (SELECT 1 FROM letters l WHERE l.id = e.letter_id)"
+    )
+    for (const o of orphans) {
+      this.run("DELETE FROM letter_events WHERE id = ?", [o.id])
+      result.deletedOrphanEvents++
+    }
+
+    // Delete duplicate letters (keep newest)
+    const dups = this.all(
+      "SELECT letter_type, period_key, MAX(created_at) as keep_ts FROM letters GROUP BY letter_type, period_key HAVING COUNT(*) > 1"
+    )
+    for (const d of dups) {
+      this.run(
+        "DELETE FROM letters WHERE letter_type = ? AND period_key = ? AND created_at < ?",
+        [d.letter_type, d.period_key, d.keep_ts]
+      )
+      result.deletedDuplicates++
+    }
+    return result
+  }
+
+  // ── One-time repair: reset scan checkpoints so history is re-scanned ──
+
+  repairMailTimeline() {
+    const worldEntered = this.worldEnteredAtMs()
+    if (!worldEntered) return { repaired: false, reason: 'no world_entered_at_ms' }
+    const dayBefore = localDateKey(worldEntered - 86400000)
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_daily_period_checked', ?)", [dayBefore])
+    this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_weekly_period_checked', ?)", [dayBefore])
+    return { repaired: true, worldEntered: new Date(worldEntered).toISOString(), resetDailyTo: dayBefore }
+  }
+
+  getDbInfo() {
+    const diag = this.diagnoseMail()
+    const recent = this.all("SELECT subject, letter_type, period_key, created_at FROM letters ORDER BY created_at DESC LIMIT 10")
+    const s = this.getSettings()
+    return {
+      path: this.filePath,
+      dataDir: this.dataDir,
+      letters: diag.letters,
+      events: diag.events,
+      orphans: { letters: diag.orphanLetters, events: diag.orphanEvents },
+      cycle: diag.cycle,
+      birthday: { month: Number(s.birthday_month) || 0, day: Number(s.birthday_day) || 0 },
+      recentLetters: recent.map(l => ({ subject: l.subject, type: l.letter_type, key: l.period_key })),
+    }
+  }
+
+  // ── Dev-only: clean test event data ──────────────────────
+
+  cleanTestEvents() {
+    const result = { festival: 0, birthday: 0, world: 0, events: 0 }
+    this.transaction(() => {
+      const types = ['festival', 'birthday', 'world']
+      for (const t of types) {
+        const info = this.one("SELECT COUNT(*) as cnt FROM letters WHERE letter_type = ?", [t])
+        if (info && info.cnt > 0) {
+          this.run("DELETE FROM letters WHERE letter_type = ?", [t])
+          result[t] = info.cnt
+        }
+      }
+      const evtInfo = this.one("SELECT COUNT(*) as cnt FROM letter_events")
+      if (evtInfo && evtInfo.cnt > 0) {
+        this.run("DELETE FROM letter_events")
+        result.events = evtInfo.cnt
+      }
+    })
+    return result
+  }
+
+  // ── Dev-only: mail timeline reset ─────────────────────────
+  // Only touches letters + letter_events.
+  // Never touches settings, profile, birthday, chronicles, companions, camp, or world progression.
+
+  resetMailTimeline() {
+    const before = this.diagnoseMail()
+    this.transaction(() => {
+      this.run("DELETE FROM letters")
+      this.run("DELETE FROM letter_events")
+      // Reset scan checkpoints so history is re-scanned, but keep mail_started_at_ms
+      this.run("DELETE FROM settings WHERE key IN ('last_daily_period_checked','last_weekly_period_checked')")
+    })
+    // Rebuild: scan daily/weekly history + generate current festival/birthday
+    this.ensurePeriodicLetters()
+    this.ensureEventLetters()
+    this.ensureBirthdayLetter()
+    const after = this.diagnoseMail()
+    return { before, after }
+  }
+
+  // ── Mail diagnostics ──────────────────────────────────────
+
+  diagnoseMail() {
+    const counts = {}
+    for (const t of ['daily', 'weekly', 'festival', 'birthday', 'world']) {
+      const r = this.one("SELECT COUNT(*) as cnt FROM letters WHERE letter_type = ?", [t])
+      counts[t] = r ? r.cnt : 0
+    }
+    const eventCount = this.one("SELECT COUNT(*) as cnt FROM letter_events")
+    const latest = this.one("SELECT MAX(created_at) as ts FROM letters")
+    const s = this.getSettings()
+
+    // Orphan detection
+    const orphanLetters = this.all(
+      "SELECT l.id, l.letter_type, l.period_key FROM letters l WHERE l.letter_type IN ('festival','birthday') AND NOT EXISTS (SELECT 1 FROM letter_events e WHERE e.letter_id = l.id)"
+    )
+    const orphanEvents = this.all(
+      "SELECT e.id, e.event_key FROM letter_events e WHERE e.letter_id IS NULL OR NOT EXISTS (SELECT 1 FROM letters l WHERE l.id = e.letter_id)"
+    )
+
+    // Duplicate detection: same letter_type + period_key
+    const duplicates = this.all(
+      "SELECT letter_type, period_key, COUNT(*) as cnt FROM letters GROUP BY letter_type, period_key HAVING cnt > 1"
+    )
+
+    return {
+      letters: counts,
+      events: eventCount ? eventCount.cnt : 0,
+      latestCreatedAt: latest ? latest.ts : null,
+      cycle: {
+        worldEnteredAtMs: this.worldEnteredAtMs(),
+        worldEnteredAtDate: this.worldEnteredAtMs() ? new Date(this.worldEnteredAtMs()).toISOString() : null,
+        lastDailyChecked: s.last_daily_period_checked || null,
+        lastWeeklyChecked: s.last_weekly_period_checked || null,
+      },
+      orphanLetters: orphanLetters.length,
+      orphanEvents: orphanEvents.length,
+      orphanLetterIds: orphanLetters.map(l => l.id),
+      orphanEventIds: orphanEvents.map(e => e.id),
+      duplicatePeriods: duplicates.length,
+      duplicateDetails: duplicates,
+    }
   }
 
   getDashboard() {

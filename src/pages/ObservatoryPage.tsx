@@ -8,18 +8,33 @@ import { buildWeeklyObservationSummary, dailySummaryNote } from '../lib/observat
 import { Icon } from '../components/Icon'
 import { ObsChart } from '../components/ObsChart'
 import { hourlyOption, weeklyBarsOption, heatmapOption } from '../lib/observatoryCharts'
-import type { DailyObservatoryData, WeeklyObservatoryData } from '../types'
+import { playUISound } from '../lib/audio'
+import type { DailyObservatoryData, WeeklyObservatoryData, NavState, NavAction } from '../types'
 
 const DAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const ENERGY_LABELS = ['', '较低', '偏低', '平稳', '不错', '很好']
 
-export function ObservatoryPage() {
+interface ObsNavTarget { periodType: 'daily' | 'weekly'; periodStart: string; periodEnd: string }
+
+export function ObservatoryPage({ obsNavTarget, onObsConsumed, navState, dispatch, actionsRef }: {
+  obsNavTarget?: ObsNavTarget | null
+  onObsConsumed?: () => void
+  navState: NavState
+  dispatch: (action: NavAction) => void
+  actionsRef: React.MutableRefObject<{
+    obsTabIndex: number; obsSetTab: (tab: 'daily' | 'weekly') => void
+    obsPrevDate: () => void; obsNextDate: () => void
+  }>
+}) {
   const { notify } = useApp()
-  const [tab, setTab] = useState<'daily' | 'weekly'>('daily')
+  const [tab, setTab] = useState<'daily' | 'weekly'>(obsNavTarget?.periodType || 'daily')
   const [daily, setDaily] = useState<DailyObservatoryData | null>(null)
   const [weekly, setWeekly] = useState<WeeklyObservatoryData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [cursor, setCursor] = useState(Date.now())
+  const [cursor, setCursor] = useState(() => {
+    if (obsNavTarget) { return new Date(obsNavTarget.periodStart + 'T00:00:00').getTime() }
+    return Date.now()
+  })
   const [reviewWin, setReviewWin] = useState('')
   const [reviewEnergy, setReviewEnergy] = useState<number | null>(null)
   const [reviewBlocker, setReviewBlocker] = useState('')
@@ -62,6 +77,10 @@ export function ObservatoryPage() {
 
   useEffect(() => { void load(cursor) }, [load, cursor])
 
+  useEffect(() => {
+    if (obsNavTarget) { onObsConsumed?.() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const nav = (n: number) => {
     if (saving) return
     setCursor(n)
@@ -86,6 +105,26 @@ export function ObservatoryPage() {
       setSaved(true)
     } catch (e) { notify(friendlyError(e), 'error') }
     finally { setSaving(false) }
+  }
+
+  // ── Expose actions for global keyboard handler ──────────────
+  const cursorRef = useRef(cursor)
+  cursorRef.current = cursor
+  const tabRef = useRef(tab)
+  tabRef.current = tab
+
+  actionsRef.current = {
+    obsTabIndex: tab === 'daily' ? 0 : 1,
+    obsSetTab: (t: 'daily' | 'weekly') => { setTab(t); dispatch({ type: 'SET_OBS_FOCUS', index: t === 'daily' ? 0 : 1 }) },
+    obsPrevDate: () => {
+      const step = tabRef.current === 'daily' ? 86400000 : 7 * 86400000
+      nav(cursorRef.current - step)
+    },
+    obsNextDate: () => {
+      const step = tabRef.current === 'daily' ? 86400000 : 7 * 86400000
+      const n = cursorRef.current + step
+      if (n <= Date.now()) nav(n)
+    },
   }
 
   const hasReviewData = reviewWin.trim() || reviewBlocker.trim() || reviewFutureNote.trim() || reviewEnergy !== null
@@ -138,6 +177,9 @@ export function ObservatoryPage() {
 
   const weeklyHeatData: number[][] = weekly?.hourlyActiveSecondsByDay ?? []
 
+  // ── NavState-driven focus ──────────────────────────────────
+  const isActive = navState.zone === 'observatory'
+
   if (loading) return <div className="page obs-page"><div className="loading-state">天文台正在校准星盘…</div></div>
 
   return <div className="page obs-page">
@@ -151,8 +193,16 @@ export function ObservatoryPage() {
             {tab === 'weekly' && weekly && <h1>{formatPeriodRange(weekly.period, 'weekly')}</h1>}
           </div>
           <div className="obs-hero-tabs">
-            <button className={tab === 'daily' ? 'active' : ''} onClick={() => setTab('daily')} aria-label="今日观测"><Icon name="sun" size={14} /> 今日观测</button>
-            <button className={tab === 'weekly' ? 'active' : ''} onClick={() => setTab('weekly')} aria-label="本周星图"><Icon name="star" size={14} /> 本周星图</button>
+            <button
+              className={`${tab === 'daily' ? 'active' : ''} ${isActive && navState.obsFocusIndex === 0 ? 'kb-focused' : ''}`}
+              onClick={() => { playUISound('select'); setTab('daily'); dispatch({ type: 'SET_OBS_FOCUS', index: 0 }) }}
+              aria-label="今日观测"
+            ><Icon name="sun" size={14} /> 今日观测</button>
+            <button
+              className={`${tab === 'weekly' ? 'active' : ''} ${isActive && navState.obsFocusIndex === 1 ? 'kb-focused' : ''}`}
+              onClick={() => { playUISound('select'); setTab('weekly'); dispatch({ type: 'SET_OBS_FOCUS', index: 1 }) }}
+              aria-label="本周星图"
+            ><Icon name="star" size={14} /> 本周星图</button>
           </div>
         </div>
         {tab === 'daily' && daily && (
@@ -197,16 +247,17 @@ export function ObservatoryPage() {
     </div>
 
     <div className="obs-nav">
-      <button className="obs-nav-btn" onClick={() => nav(tab === 'daily' ? cursor - 86400000 : cursor - 7 * 86400000)} aria-label="上一个">‹</button>
+      <button className="obs-nav-btn" onClick={() => { playUISound('select'); const step = tab === 'daily' ? 86400000 : 7 * 86400000; nav(cursor - step) }} aria-label="上一个">‹</button>
       <span className="obs-nav-label">
         {tab === 'daily' && daily ? formatDailyNavLabel(daily.period) : ''}
         {tab === 'weekly' && weekly ? formatWeeklyNavLabel(weekly.period) : ''}
       </span>
-      <button className="obs-nav-btn" onClick={() => { const n = tab === 'daily' ? cursor + 86400000 : cursor + 7 * 86400000; if (n <= Date.now()) nav(n) }} disabled={tab === 'daily' ? cursor + 86400000 > Date.now() : cursor + 7 * 86400000 > Date.now()} aria-label="下一个">›</button>
-      {!isToday && tab === 'daily' ? <button className="obs-nav-today" onClick={goToday}>回到今天</button> : null}
-      {!isCurrentWeek && tab === 'weekly' ? <button className="obs-nav-today" onClick={goToday}>回到本周</button> : null}
+      <button className="obs-nav-btn" onClick={() => { playUISound('select'); const n = tab === 'daily' ? cursor + 86400000 : cursor + 7 * 86400000; if (n <= Date.now()) nav(n) }} disabled={tab === 'daily' ? cursor + 86400000 > Date.now() : cursor + 7 * 86400000 > Date.now()} aria-label="下一个">›</button>
+      {!isToday && tab === 'daily' ? <button className="obs-nav-today" onClick={() => { playUISound('select'); goToday() }}>回到今天</button> : null}
+      {!isCurrentWeek && tab === 'weekly' ? <button className="obs-nav-today" onClick={() => { playUISound('select'); goToday() }}>回到本周</button> : null}
     </div>
 
+    {/* ── Daily view ─────────────────────────────────────── */}
     {tab === 'daily' && daily && <>
       <section className="panel obs-panel-wood">
         <h2 className="obs-panel-title">二十四时观测</h2>
@@ -273,6 +324,7 @@ export function ObservatoryPage() {
       <div className="obs-herald"><span className="obs-herald-icon">✦</span><span>小天使会在夜深后整理今天的星页</span></div>
     </>}
 
+    {/* ── Weekly view ────────────────────────────────────── */}
     {tab === 'weekly' && weekly && <>
       {(() => {
         const obs = buildWeeklyObservationSummary(weekly)

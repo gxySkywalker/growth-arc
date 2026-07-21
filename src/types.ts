@@ -1,5 +1,8 @@
 export type PageId = 'home' | 'overview' | 'plan' | 'history' | 'review' | 'growth' | 'settings' | 'observatory' | 'mail'
 
+// Re-exported from navState for page convenience
+export type { NavState, NavAction } from './lib/navState'
+
 export interface Area {
   id: string
   name: string
@@ -383,6 +386,8 @@ export interface GrowthArcApi {
     setApiKey: (key: string) => Promise<boolean>
     clearApiKey: () => Promise<boolean>
     openDataFolder: () => Promise<string>
+    getBirthday: () => Promise<{ month: number; day: number; updatedAt: number }>
+    setBirthday: (month: number, day: number) => Promise<{ month: number; day: number; updatedAt: number }>
   }
   ai: {
     generate: (type: 'daily' | 'weekly', date: string) => Promise<{ report: AiReport; model: string }>
@@ -404,7 +409,8 @@ export interface GrowthArcApi {
     markRead: (id: string) => Promise<{ id: string; isRead: boolean; readAt: number | null }>
     markUnread: (id: string) => Promise<{ id: string; isRead: boolean; readAt: number | null }>
     saveReply: (id: string, replyText: string) => Promise<{ replyText: string | null; updatedAt: number }>
-    ensurePeriodic: () => Promise<EnsurePeriodicLettersResult>
+    ensurePeriodic: (simTs?: number) => Promise<EnsurePeriodicLettersResult>
+    testLetter: () => Promise<{ success: boolean; text?: string; provider?: string; model?: string; error?: string }>
   }
 }
 
@@ -461,7 +467,7 @@ export interface WeeklyObservatoryData {
 
 export interface LetterListItem {
   id: string
-  letterType: 'daily' | 'weekly'
+  letterType: 'daily' | 'weekly' | 'festival'
   periodKey: string
   periodStart: number
   periodEnd: number
@@ -474,11 +480,15 @@ export interface LetterListItem {
 
 export interface LetterDetail {
   id: string
-  letterType: 'daily' | 'weekly'
+  letterType: 'daily' | 'weekly' | 'festival'
   period: ObservatoryPeriod
   subject: string
   body: string
   bodySource: 'template' | 'ai'
+  aiStatus: 'pending' | 'success' | 'template' | 'failed' | 'quota_exceeded' | 'skipped'
+  aiProvider?: string
+  aiModel?: string
+  aiPromptVersion?: number
   factSummary: { totalActiveSeconds: number; sessionCounts: SessionCounts; completedTaskCount: number }
   isRead: boolean
   readAt: number | null
