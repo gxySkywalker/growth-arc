@@ -206,6 +206,45 @@ function formatDurationZh(s) {
   return `${sec} 秒`
 }
 
+function narrativeDirectionName(direction) {
+  const fact = typeof direction === 'object' && direction !== null
+    ? direction
+    : { name: direction, source: String(direction || '').trim() === '通用学习' ? 'system_default' : 'user_created' }
+  const raw = String(fact.name || '').trim()
+  if (!raw) return null
+  // Only the seeded internal category is translated.  Every name the traveler
+  // chose, and every world place, remains part of their own record.
+  return fact.source === 'system_default' ? '旧书页间的旅途' : raw
+}
+
+function totalDepartures(facts) {
+  return Object.values(f(facts, 'sessionCounts') || {}).reduce((sum, count) => sum + (Number(count) || 0), 0)
+}
+
+function journeyFromFacts(facts) {
+  const stored = facts.journey || {}
+  const legacyDirection = (f(facts, 'directionBreakdown') || [])[0]
+  const rawDirection = stored.mainDirection ?? legacyDirection?.name ?? null
+  return {
+    ...stored,
+    completedTasks: stored.completedTasks || facts.completedTasks || [],
+    discoveries: stored.discoveries || facts.discoveries || [],
+    mainDirectionNarrative: stored.mainDirectionNarrative || (rawDirection
+      ? { name: rawDirection, source: legacyDirection?.source || (rawDirection === '通用学习' ? 'system_default' : 'user_created') }
+      : null),
+  }
+}
+
+function namedMarks(items, max = 3) {
+  return (items || []).map((item) => String(item?.title || item?.name || '').trim()).filter(Boolean).slice(0, max)
+}
+
+function marksSentence(marks, noun) {
+  if (!marks.length) return null
+  const quoted = marks.map((mark) => `「${mark}」`).join('、')
+  return marks.length === 1 ? `我在地图边上替你留下一枚${noun}，上面写着${quoted}。` : `我把${quoted}几枚${noun}一并夹进了星页。`
+}
+
 function neutralCompare(curr, prev) {
   if (!prev) return '上周暂无记录'
   const diff = curr - prev
@@ -441,20 +480,37 @@ function f(facts, key) { return facts.stats?.[key] ?? facts[key] }
 function generateDailyTemplate(facts, seedInput) {
   const seed = hashSeed(seedInput)
   const hasSession = (f(facts, 'totalActiveSeconds') || 0) > 0
-  const season = seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
+  const journey = journeyFromFacts(facts)
+  const observatory = facts.observatory || {}
+  const chronicle = facts.chronicle || {}
+  const season = chronicle.season || seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
+  const state = facts.worldState
+  const departures = totalDepartures(facts)
+  const direction = narrativeDirectionName(journey.mainDirectionNarrative)
+  const taskMarks = namedMarks(journey.completedTasks)
+  const discoveries = namedMarks(chronicle.newDiscoveries || journey.discoveries, 2)
+  const hasJourneyRecord = hasSession || taskMarks.length > 0 || discoveries.length > 0
 
-  if (!hasSession && f(facts, 'hasWrittenReview')) {
+  if (!hasJourneyRecord && f(facts, 'hasWrittenReview')) {
     return '天文台留下了一句话。今天有一段记录被收好。'
   }
-  if (!hasSession) {
+  if (!hasJourneyRecord) {
     return dailyNoSessionLines(seed)
   }
 
-  const periodKey = facts.periodKey || ''
   const parts = []
-  if (seed % 5 === 0) parts.push(angelDetail(periodKey, seed))
-  else if (seed % 3 === 0) parts.push(weatherNote(season, seed))
-  parts.push(DAILY_POOL[seed % DAILY_POOL.length])
+  if (departures > 0) parts.push(`今天你一共踏上了${departures}次出征，来路都落在地图上。`)
+  if (direction) parts.push(`今天的旅途主要朝着${direction}延伸。`)
+  const taskSentence = marksSentence(taskMarks, '路标')
+  if (taskSentence) parts.push(taskSentence)
+  else parts.push('今天留下的足迹，我已经按着来路收进星页里。')
+  if (observatory.hasWrittenReview) parts.push('天文台旁还留着你写下的一句话，我也一并夹进了信札。')
+  else parts.push('天文台把这段来路安静地记在了今日的星页上。')
+  if (discoveries.length) parts.push(`${season}天的编年史收下了新的发现：${discoveries.map((name) => `「${name}」`).join('、')}。`)
+  else parts.push(`${season}天的这一页，我已经和今日的足迹放在一起。`)
+  if (state?.locations?.postOffice) parts.push(worldStateDetail(state, seed))
+  else parts.push(weatherNote(season, seed))
+  parts.push('我把今天的记录收进木格里了。')
   return parts.join('')
 }
 
@@ -468,8 +524,8 @@ const WEEKLY_OPENINGS = [
 ]
 
 const WEEKLY_FIRST = [
-  '这是旅途的第一封周报。地图上的路才刚刚开始，但已经可以辨认出方向了。',
-  '第一次给你写周报。邮袋拖过来的时候差点绊了一下。不过没关系，以后会越来越熟练的。',
+  '这是第一封旅途札记。地图上的路才刚刚开始，但已经可以辨认出方向了。',
+  '第一次替你收好这一周的旅途札记。邮袋拖过来的时候差点绊了一下，不过信纸都没有弄皱。',
 ]
 
 const WEEKLY_LONGER = [
@@ -500,10 +556,23 @@ function generateWeeklyTemplate(facts, seedInput) {
   const prevSec = f(facts, 'previousPeriodTotalSeconds') || 0
   const hasPrevWeek = prevSec > 0
   const diff = totalSec - prevSec
-  const season = seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
+  const journey = journeyFromFacts(facts)
+  const observatory = facts.observatory || {}
+  const chronicle = facts.chronicle || {}
+  const season = chronicle.season || seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
+  const departures = totalDepartures(facts)
+  const direction = narrativeDirectionName(journey.mainDirectionNarrative)
+  const taskMarks = namedMarks(journey.completedTasks)
+  const discoveries = namedMarks(chronicle.newDiscoveries || journey.discoveries, 3)
   const parts = []
 
   parts.push(WEEKLY_OPENINGS[seed % WEEKLY_OPENINGS.length])
+  if (departures > 0) parts.push(`这七天里，你一共踏上了${departures}次出征；每一段来路都收在这份札记里。`)
+  if (direction) parts.push(`这周的路大多向${direction}那边伸去。`)
+  const taskSentence = marksSentence(taskMarks, '代表性的路标')
+  if (taskSentence) parts.push(taskSentence)
+  else parts.push('这一周留下的路标，我都按日期夹在札记里。')
+  if (observatory.weeklyNote) parts.push(`整理木格时，我也发现了一句你留下的话：「${observatory.weeklyNote}」`)
 
   if (!hasPrevWeek) {
     parts.push(WEEKLY_FIRST[seed % WEEKLY_FIRST.length])
@@ -515,13 +584,10 @@ function generateWeeklyTemplate(facts, seedInput) {
     parts.push(WEEKLY_SAME[seed % WEEKLY_SAME.length])
   }
 
-  // Low-probability detail
-  const periodKey = facts.periodKey || ''
-  if (seed % 7 === 0) {
-    parts.push(angelDetail(periodKey, seed))
-  } else if (seed % 4 === 0) {
-    parts.push(weatherNote(season, seed))
-  }
+  if (discoveries.length) parts.push(`${season}天的编年史这一页添进了新的发现：${discoveries.map((name) => `「${name}」`).join('、')}。`)
+  else parts.push(`${season}天的编年史把这一周的来路收好了。`)
+  if (facts.worldState?.locations?.postOffice) parts.push(worldStateDetail(facts.worldState, seed))
+  else if (seed % 4 === 0) parts.push(weatherNote(season, seed))
 
   parts.push(WEEKLY_CLOSINGS[seed % WEEKLY_CLOSINGS.length])
 
@@ -530,9 +596,33 @@ function generateWeeklyTemplate(facts, seedInput) {
 
 // ── Facts builders ──────────────────────────────────────────
 
+function buildJourneyFacts(stats) {
+  const directions = (stats.directionBreakdown || []).map(d => ({
+    id: d.id || null,
+    name: d.name,
+    source: d.source || (d.name === '通用学习' ? 'system_default' : 'user_created'),
+    seconds: d.seconds,
+  }))
+  const mainDirection = directions[0] || null
+  return {
+    completedTasks: (stats.completedTasks || []).map(t => ({ title: t.title })),
+    discoveries: (stats.discoveries || []).map(d => ({ name: d.name, kind: d.kind })),
+    mainDirection: mainDirection?.name || null,
+    mainDirectionNarrative: mainDirection ? { name: mainDirection.name, source: mainDirection.source } : null,
+    hasOutcome: stats.hasOutcome === true,
+  }
+}
+
+function buildChronicleFacts(stats, period) {
+  return {
+    season: seasonForDate(new Date(period.periodStart)),
+    newDiscoveries: (stats.discoveries || []).map(d => ({ name: d.name, kind: d.kind })),
+  }
+}
+
 function buildDailyLetterFacts(stats, period) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     letterType: 'daily',
     period: {
       periodKey: period.periodKey,
@@ -546,19 +636,13 @@ function buildDailyLetterFacts(stats, period) {
       sessionCounts: stats.sessionCounts,
       completedTaskCount: (stats.completedTasks || []).length,
       longestSessionSeconds: stats.longestSessionSeconds || 0,
-      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ name: d.name, seconds: d.seconds })),
+      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ id: d.id || null, name: d.name, source: d.source || (d.name === '通用学习' ? 'system_default' : 'user_created'), seconds: d.seconds })),
     },
-    journey: {
-      completedTasks: (stats.completedTasks || []).map(t => ({ title: t.title })),
-      mainDirection: (stats.directionBreakdown || [])[0]?.name || null,
-      hasOutcome: stats.hasOutcome === true,
-    },
+    journey: buildJourneyFacts(stats),
     observatory: {
       hasWrittenReview: stats.hasWrittenReview === true,
     },
-    chronicle: {
-      season: seasonForDate(new Date(period.periodStart)),
-    },
+    chronicle: buildChronicleFacts(stats, period),
     memory: {
       // populated later when annual/retrospective letters are generated
     },
@@ -575,7 +659,7 @@ function seasonForDate(d) {
 
 function buildWeeklyLetterFacts(stats, period, prevTotal) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     letterType: 'weekly',
     period: {
       periodKey: period.periodKey,
@@ -590,20 +674,15 @@ function buildWeeklyLetterFacts(stats, period, prevTotal) {
       sessionCounts: stats.sessionCounts,
       completedTaskCount: (stats.completedTasks || []).length,
       longestSessionSeconds: stats.longestSessionSeconds || 0,
-      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ name: d.name, seconds: d.seconds })),
+      directionBreakdown: (stats.directionBreakdown || []).map(d => ({ id: d.id || null, name: d.name, source: d.source || (d.name === '通用学习' ? 'system_default' : 'user_created'), seconds: d.seconds })),
       previousPeriodTotalSeconds: prevTotal || 0,
     },
-    journey: {
-      completedTasks: (stats.completedTasks || []).map(t => ({ title: t.title })),
-      mainDirection: (stats.directionBreakdown || [])[0]?.name || null,
-      hasOutcome: stats.hasOutcome === true,
-    },
+    journey: buildJourneyFacts(stats),
     observatory: {
       hasWrittenReview: stats.hasWrittenReview === true,
+      weeklyNote: stats.weeklyObservatoryNote || null,
     },
-    chronicle: {
-      season: seasonForDate(new Date(period.periodStart)),
-    },
+    chronicle: buildChronicleFacts(stats, period),
     memory: {},
   }
 }
@@ -624,7 +703,13 @@ function buildDailyStatsForFacts(db, period) {
     "SELECT COUNT(*) AS count FROM focus_sessions WHERE status = 'completed' AND ended_at >= ? AND ended_at < ? AND outcome IS NOT NULL AND outcome != '' AND TRIM(outcome) != ''",
     [period.periodStart, period.periodEnd],
   ).count > 0
-  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, completedTasks, hasWrittenReview, hasOutcome }
+  const discoveries = db.all(`SELECT d.kind, COALESCE(r.name, n.name) AS name
+    FROM discoveries d
+    LEFT JOIN world_regions r ON d.kind = 'region' AND r.id = d.target_id
+    LEFT JOIN world_nodes n ON d.kind = 'node' AND n.id = d.target_id
+    WHERE d.created_at >= ? AND d.created_at < ? AND COALESCE(r.name, n.name) IS NOT NULL
+    ORDER BY d.created_at ASC LIMIT 5`, [period.periodStart, period.periodEnd])
+  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, completedTasks, discoveries, hasWrittenReview, hasOutcome }
 }
 
 function buildWeeklyStatsForFacts(db, period) {
@@ -644,11 +729,24 @@ function buildWeeklyStatsForFacts(db, period) {
     "SELECT COUNT(*) AS count FROM daily_reviews WHERE review_date >= ? AND review_date < ? AND (TRIM(COALESCE(win,'')) != '' OR TRIM(COALESCE(blocker,'')) != '' OR TRIM(COALESCE(tomorrow_task,'')) != '')",
     [localDateKey(period.periodStart), localDateKey(period.periodEnd - 86400000)],
   )
+  const weeklyReviews = db.all(`SELECT win, blocker, tomorrow_task FROM daily_reviews
+    WHERE review_date >= ? AND review_date < ?
+    ORDER BY review_date DESC`, [localDateKey(period.periodStart), localDateKey(period.periodEnd - 86400000)])
+  const weeklyObservatoryNote = weeklyReviews
+    .flatMap((item) => [item.win, item.blocker, item.tomorrow_task])
+    .map((item) => String(item || '').trim())
+    .find(Boolean) || null
   const hasOutcome = db.one(
     "SELECT COUNT(*) AS count FROM focus_sessions WHERE status = 'completed' AND ended_at >= ? AND ended_at < ? AND outcome IS NOT NULL AND outcome != '' AND TRIM(outcome) != ''",
     [period.periodStart, period.periodEnd],
   ).count > 0
-  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, dailyActiveSeconds, completedTasks, hasWrittenReview: review ? review.count > 0 : false, hasOutcome }
+  const discoveries = db.all(`SELECT d.kind, COALESCE(r.name, n.name) AS name
+    FROM discoveries d
+    LEFT JOIN world_regions r ON d.kind = 'region' AND r.id = d.target_id
+    LEFT JOIN world_nodes n ON d.kind = 'node' AND n.id = d.target_id
+    WHERE d.created_at >= ? AND d.created_at < ? AND COALESCE(r.name, n.name) IS NOT NULL
+    ORDER BY d.created_at ASC LIMIT 8`, [period.periodStart, period.periodEnd])
+  return { ...stats, periodKey: period.periodKey, periodStart: period.periodStart, dailyActiveSeconds, completedTasks, discoveries, weeklyObservatoryNote, hasWrittenReview: review ? review.count > 0 : false, hasOutcome }
 }
 
 const TIME_WINDOWS = [
@@ -694,7 +792,7 @@ function getActiveFestivalNodes(now, mailStartedMs) {
     for (let year = startYear; year <= currentYear; year++) {
       for (const ld of f.letters) {
         const ts = festivalDate(f, year, ld.day)
-        if (ts <= now) {
+        if (ts <= now && (!mailStartedMs || ts >= mailStartedMs)) {
           nodes.push({
             eventType: 'festival',
             eventKey: `${key}:${year}:${ld.subtype}`,
@@ -790,6 +888,7 @@ module.exports = {
   previousWeeklyPeriod,
   hashSeed,
   generateLocalLetterSubject,
+  narrativeDirectionName,
   generateWeeklyFullTitle,
   weeklyDeliveryLabel,
   generateDailyTemplate,
@@ -807,6 +906,7 @@ module.exports = {
   getActiveFestivalNodes,
   buildFestivalFacts,
   getWorldState,
+  worldStateDetail,
   generateFestivalTemplate,
   birthdayPeriod,
   generateBirthdayTemplate,

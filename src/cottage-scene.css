@@ -33,7 +33,7 @@
 
 .cottage-scene-companion { position: absolute; left: 43.75%; top: 43.333%; width: 10%; height: 17.777%; color: #f5ddb7; pointer-events: none; image-rendering: pixelated; }
 .cottage-scene-companion img, .cottage-scene-companion svg { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
-.cottage-scene-companion.facing-right img, .cottage-scene-companion.facing-right svg { transform: scaleX(-1); }
+.cottage-scene-companion.facing-right svg { transform: scaleX(-1); }
 .cottage-scene-companion.is-attentive { animation: companion-answer .48s steps(2, end) 2; }
 @keyframes companion-answer { 50% { margin-top: -1.4%; } }
 

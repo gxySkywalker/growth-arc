@@ -1,8 +1,12 @@
 import type { Companion } from '../types'
+import { HearthHoundSprite } from './HearthHoundSprite'
 
 export function PixelCompanion({ companion, size = 'large', sleeping = false }: { companion: Companion | null; size?: 'small' | 'medium' | 'large'; sleeping?: boolean }) {
   const speciesId = companion?.species_id || 'hearth_hound'
   const palette = companion?.species?.palette || 'honey'
+  if (speciesId === 'hearth_hound') {
+    return <HearthHoundSprite size={size} sleeping={sleeping} stage={companion?.stage || 0} />
+  }
   return <div
     className={`pixel-companion sprite-${speciesId} palette-${palette} sprite-${size} stage-${companion?.stage || 0} ${sleeping ? 'is-sleeping' : ''}`}
     role="img"

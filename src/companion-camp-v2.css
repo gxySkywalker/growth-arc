@@ -1,0 +1,88 @@
+.companion-camp-v2 { max-width: 1240px; }
+.camp-v2-heading { margin-bottom: 20px; }
+.camp-v2-heading p { max-width: 720px; }
+.camp-v2-layout { display: grid; grid-template-columns: 274px minmax(0, 1fr); gap: 18px; }
+.camp-v2-dex { padding: 14px; border: 1px solid rgba(100, 66, 39, .25); border-radius: 8px; background: rgba(255, 249, 232, .7); box-shadow: 0 8px 18px rgba(74, 48, 30, .05); }
+.camp-v2-section-title { display: flex; gap: 10px; align-items: center; padding: 4px 3px 12px; border-bottom: 1px solid var(--line); }
+.camp-v2-section-title > span { display: grid; place-items: center; width: 31px; height: 31px; color: #a45b36; border: 1px solid #c9a372; background: #ebd6ad; }
+.camp-v2-section-title small, .camp-v2-section-title strong { display: block; }
+.camp-v2-section-title small { color: var(--muted); font-size: 10px; }
+.camp-v2-section-title strong { margin-top: 2px; font-size: 15px; }
+.camp-v2-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.camp-v2-list button { min-height: 68px; display: grid; grid-template-columns: 50px 1fr auto; align-items: center; gap: 8px; padding: 7px; border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer; }
+.camp-v2-list button:hover, .camp-v2-list button.selected { border-color: #c89e6d; background: #edd9b3; }
+.camp-v2-list .hearth-hound-sprite-small { width: 42px; height: 42px; }
+.camp-v2-list strong, .camp-v2-list small { display: block; }
+.camp-v2-list strong { font-size: 13px; }
+.camp-v2-list small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.camp-v2-list i { color: #a75e37; font-size: 17px; font-style: normal; }
+.camp-v2-dex-note { margin: 15px 4px 3px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.camp-v2-profile { min-height: 405px; display: grid; grid-template-columns: minmax(330px, 1.06fr) minmax(310px, .94fr); overflow: hidden; border: 4px solid #65412a; border-radius: 8px; background: #f7e9cf; box-shadow: var(--shadow); }
+.camp-v2-portrait { position: relative; display: grid; place-items: center; overflow: hidden; min-height: 395px; background: linear-gradient(180deg, #6a675f 0%, #aa8c68 64%, #754d35 64%); }
+.camp-v2-portrait::before { content: ''; position: absolute; inset: 0; opacity: .22; background: linear-gradient(90deg, transparent 49.6%, rgba(255,237,201,.22) 50%, transparent 50.4%), linear-gradient(rgba(255,237,201,.16) 49.6%, transparent 50.4%); background-size: 36px 36px; }
+.camp-v2-portrait::after { content: '⌁'; position: absolute; z-index: 4; right: 24px; bottom: 23px; display: grid; place-items: center; width: 30px; height: 30px; color: #ffdda0; border: 2px solid #6e4328; border-radius: 50%; background: #b66c33; box-shadow: inset 0 0 0 3px #deae61, 2px 3px 0 rgba(50,27,17,.34); font-size: 13px; }
+.camp-v2-portrait.has-portrait { background: linear-gradient(180deg, #777369 0%, #9e805d 66%, #704934 66%); }
+.camp-v2-portrait .companion-camp-portrait { position: relative; z-index: 2; width: min(78%, 360px); max-height: 332px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 9px 0 rgba(48, 28, 18, .25)); }
+.camp-v2-portrait .pixel-companion { position: relative; z-index: 2; transform: scale(1.55); }
+.camp-v2-portrait-copy { position: absolute; z-index: 3; top: 20px; left: 21px; max-width: 270px; display: flex; flex-direction: column; gap: 5px; color: #fff1d1; text-shadow: 1px 2px #402719; }
+.camp-v2-portrait-copy span { color: #edbd78; font-size: 11px; }
+.camp-v2-portrait-copy strong { font-size: 16px; line-height: 1.45; }
+.camp-v2-portrait-floor { position: absolute; z-index: 1; bottom: 51px; width: 155px; height: 28px; border-radius: 50%; background: rgba(48, 26, 15, .35); }
+.camp-v2-profile-copy { display: flex; flex-direction: column; align-items: flex-start; padding: 36px 34px 29px; }
+.camp-v2-species { padding: 5px 8px; color: #72513a; border: 1px solid #bd9464; background: #e8cd9c; font-size: 11px; }
+.camp-v2-name-row { display: flex; align-items: center; gap: 11px; margin: 14px 0 2px; }
+.camp-v2-profile-copy h2 { margin: 0; font-size: 34px; }
+.camp-v2-rename { padding: 4px 7px; color: #98603e; border: 1px solid #cda778; background: transparent; cursor: pointer; font-size: 10px; }
+.camp-v2-rename:hover { color: #fff2d4; border-color: #a85735; background: #ad623a; }
+.camp-v2-stage { margin: 0; color: #9b6242; font-size: 14px; }
+.camp-v2-stage span { padding: 0 4px; color: #c6a276; }
+.camp-v2-together { width: 100%; display: flex; flex-direction: column; gap: 3px; margin-top: 16px; padding: 9px 11px; border-left: 3px solid #bc6b3d; background: linear-gradient(90deg, rgba(232, 204, 157, .58), transparent); }
+.camp-v2-together span { color: #71442f; font-size: 13px; font-weight: 700; }
+.camp-v2-together small { color: #987a62; font-size: 10px; line-height: 1.45; }
+.camp-v2-introduction { margin: 15px 0 0; color: var(--muted); line-height: 1.75; font-size: 13px; }
+.camp-v2-home-note { display: flex; gap: 8px; width: 100%; margin-top: 12px; padding: 9px 10px; color: #856650; border-top: 1px dashed #d0b38a; border-bottom: 1px dashed #d0b38a; font-size: 11px; line-height: 1.55; }
+.camp-v2-home-note span { color: #b1653b; font-size: 15px; }
+.camp-v2-home-note p { margin: 0; }
+.camp-v2-bond { width: 100%; margin-top: auto; padding-top: 21px; }
+.camp-v2-bond > div:first-child { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 12px; }
+.camp-v2-bond strong { color: #875033; font-size: 22px; }
+.camp-v2-bond strong small { color: #9d7d62; font-size: 12px; }
+.camp-v2-bond-track { height: 10px; margin: 8px 0; overflow: hidden; border: 2px solid #ae895e; background: #dcc8a4; }
+.camp-v2-bond-track i { display: block; height: 100%; background: linear-gradient(90deg, #a94f32, #e3a34f); }
+.camp-v2-bond p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.camp-v2-home-mark { margin-top: 16px; color: #8a5b38; font-size: 12px; }
+.camp-v2-story-grid, .camp-v2-bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.camp-v2-personality p, .camp-v2-growth > p { margin: 15px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.camp-v2-traits { display: grid; gap: 8px; margin-top: 15px; }
+.camp-v2-traits div { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: baseline; padding: 9px 11px; border-left: 3px solid #c2814d; background: rgba(232, 210, 170, .55); }
+.camp-v2-traits small { color: var(--muted); font-size: 10px; }
+.camp-v2-traits strong { color: #573a2a; font-size: 13px; }
+.camp-v2-growth-line { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; align-items: center; margin-top: 20px; }
+.camp-v2-growth-line > span { height: 2px; background: #d4bc93; }
+.camp-v2-growth-line > div { display: flex; flex-direction: column; gap: 4px; color: #a99175; }
+.camp-v2-growth-line > div:nth-of-type(2) { text-align: center; }
+.camp-v2-growth-line > div:nth-of-type(3) { text-align: right; }
+.camp-v2-growth-line i { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #c8aa7b; background: #e6d2a8; color: #8c684c; font-style: normal; font-size: 10px; }
+.camp-v2-growth-line > div:nth-of-type(2) i { margin-inline: auto; }
+.camp-v2-growth-line > div:nth-of-type(3) i { margin-left: auto; }
+.camp-v2-growth-line .reached { color: #5e3e2d; }
+.camp-v2-growth-line .reached i { color: #fff1ce; border-color: #994e30; background: #b86036; }
+.camp-v2-growth-line strong { font-size: 13px; }
+.camp-v2-growth-line small { font-size: 10px; }
+.camp-v2-memories { margin-top: 18px; }
+.camp-v2-memory-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.camp-v2-memory-list article { min-height: 95px; display: grid; grid-template-columns: 22px 1fr; align-content: start; column-gap: 7px; padding: 12px; border: 1px solid #d3ba91; background: #efe0c3; }
+.camp-v2-memory-list article > span { color: #ad6438; }
+.camp-v2-memory-list p { grid-column: 2; margin: 0; color: #654936; font-size: 12px; line-height: 1.6; }
+.camp-v2-memory-list small { grid-column: 2; margin-top: 8px; color: #9a8068; font-size: 10px; }
+.camp-v2-rename-dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(38, 23, 17, .56); backdrop-filter: blur(2px); }
+.camp-v2-rename-dialog { width: min(420px, 100%); padding: 27px; border: 3px solid #5a3927; border-radius: 7px; background: #f8e9ca; box-shadow: 8px 10px 0 rgba(38,22,14,.34), inset 0 0 0 2px #d4af7d; }
+.camp-v2-rename-dialog .day-ribbon { margin-bottom: 13px; }
+.camp-v2-rename-dialog h2 { margin: 0; font-size: 23px; }
+.camp-v2-rename-dialog p { margin: 12px 0 17px; color: var(--muted); line-height: 1.7; font-size: 12px; }
+.camp-v2-rename-dialog input { width: 100%; height: 42px; padding: 0 11px; color: #4d3123; outline: none; border: 2px solid #b58a5d; background: #fff5de; font: inherit; }
+.camp-v2-rename-dialog input:focus { border-color: #a85835; box-shadow: 0 0 0 2px rgba(193,111,61,.18); }
+.camp-v2-rename-dialog > small { display: block; margin: 6px 0 20px; color: #9b7b60; font-size: 10px; }
+.camp-v2-rename-dialog > div:last-child { display: flex; justify-content: flex-end; gap: 9px; }
+@media (max-width: 900px) { .camp-v2-layout { grid-template-columns: 1fr; } .camp-v2-dex { order: 2; } .camp-v2-list { display: grid; grid-template-columns: repeat(2, 1fr); } .camp-v2-profile { grid-template-columns: 1fr; } .camp-v2-portrait { min-height: 310px; } .camp-v2-story-grid, .camp-v2-bottom-grid { grid-template-columns: 1fr; } }
+@media (max-width: 580px) { .camp-v2-profile-copy { padding: 25px 20px; } .camp-v2-memory-list { grid-template-columns: 1fr; } .camp-v2-list { grid-template-columns: 1fr; } .camp-v2-growth-line { grid-template-columns: 1fr; gap: 9px; } .camp-v2-growth-line > span { width: 2px; height: 14px; margin-left: 13px; } .camp-v2-growth-line > div, .camp-v2-growth-line > div:nth-of-type(2), .camp-v2-growth-line > div:nth-of-type(3) { text-align: left; } .camp-v2-growth-line > div:nth-of-type(2) i, .camp-v2-growth-line > div:nth-of-type(3) i { margin-inline: 0; } }

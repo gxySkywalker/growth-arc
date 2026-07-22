@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error The Electron domain module is CommonJS and intentionally shared with tests.
 import domain from '../../electron/domain.cjs'
 
-const { focusXp, completionXp, levelFromXp, secondsWithinRange, getReturnKind, countSessionTypes, shouldGenerateDailyLetter, shouldGenerateWeeklyLetter, getDailyPeriod, getWeeklyPeriod, generateLocalLetterSubject, generateWeeklyFullTitle, weeklyDeliveryLabel, generateDailyTemplate, generateWeeklyTemplate, buildDailyLetterFacts, buildWeeklyLetterFacts, hashSeed, formatDurationZh, neutralCompare, getActiveFestivalNodes, buildFestivalFacts, generateFestivalTemplate, birthdayPeriod, generateBirthdayTemplate, getWorldState } = domain
+const { focusXp, completionXp, levelFromXp, secondsWithinRange, getReturnKind, countSessionTypes, shouldGenerateDailyLetter, shouldGenerateWeeklyLetter, getDailyPeriod, getWeeklyPeriod, generateLocalLetterSubject, narrativeDirectionName, generateWeeklyFullTitle, weeklyDeliveryLabel, generateDailyTemplate, generateWeeklyTemplate, buildDailyLetterFacts, buildWeeklyLetterFacts, hashSeed, formatDurationZh, neutralCompare, getActiveFestivalNodes, buildFestivalFacts, generateFestivalTemplate, birthdayPeriod, generateBirthdayTemplate, getWorldState } = domain
 
 describe('experience and time rules', () => {
   it('keeps focus rewards bounded and completion rewards dominant', () => {
@@ -225,6 +225,43 @@ describe('template generation', () => {
     expect(generateWeeklyTemplate(f, 's1')).toBe(generateWeeklyTemplate(f, 's1'))
   })
 
+  it('daily template writes the frozen journey, observatory, chronicle, and world facts', () => {
+    const body = generateDailyTemplate({
+      stats: { totalActiveSeconds: 600, sessionCounts: { brief: 0, short: 2, expedition: 1, deep: 0 } },
+      journey: { mainDirection: '松风林', mainDirectionNarrative: { name: '松风林', source: 'world_place' }, completedTasks: [{ title: '确认旧路' }, { title: '收好地图边角' }] },
+      observatory: { hasWrittenReview: true },
+      chronicle: { season: '夏', newDiscoveries: [{ name: '林间旧亭', kind: 'node' }] },
+      worldState: { locations: { postOffice: { windowPhase: 'fixed', decorated: false } }, flora: { flowerPhase: 'dormant' }, visitor: null, activeEvents: [] },
+    }, '')
+    expect(body).toContain('3次出征')
+    expect(body).toContain('松风林')
+    expect(body).toContain('确认旧路')
+    expect(body).toContain('收好地图边角')
+    expect(body).toContain('林间旧亭')
+    expect(body).toContain('天文台')
+    expect(body).toContain('夏天')
+    expect(body).toContain('艾达今天来把窗框紧了一下')
+  })
+
+  it('weekly template writes the main direction, representative waypoint, chronicle, and prior-week relation', () => {
+    const body = generateWeeklyTemplate({
+      stats: { totalActiveSeconds: 7200, previousPeriodTotalSeconds: 1800, sessionCounts: { brief: 0, short: 1, expedition: 2, deep: 0 } },
+      journey: { mainDirection: '白石河谷', mainDirectionNarrative: { name: '白石河谷', source: 'world_place' }, completedTasks: [{ title: '修好旧桥的路牌' }, { title: '找到河湾石阶' }] },
+      observatory: { hasWrittenReview: true, weeklyNote: '河湾的旧路终于接上了。' },
+      chronicle: { season: '秋', newDiscoveries: [{ name: '河谷渡口', kind: 'region' }] },
+      worldState: { locations: { postOffice: { windowPhase: 'fixed', decorated: false } }, flora: { flowerPhase: 'dormant' }, visitor: null, activeEvents: [] },
+    }, '')
+    expect(body).toContain('3次出征')
+    expect(body).toContain('白石河谷')
+    expect(body).toContain('修好旧桥的路牌')
+    expect(body).toContain('找到河湾石阶')
+    expect(body).toContain('河谷渡口')
+    expect(body).toContain('河湾的旧路终于接上了。')
+    expect(body).toContain('比上周走得更远')
+    expect(body).toContain('秋天')
+    expect(body).toContain('艾达今天来把窗框紧了一下')
+  })
+
   it('daily template length in range', () => {
     const body = generateDailyTemplate(facts(), 't1')
     expect(body.length).toBeGreaterThanOrEqual(10)
@@ -253,17 +290,51 @@ describe('template generation', () => {
     const w = generateWeeklyTemplate(facts({ previousPeriodTotalSeconds: 0 }), 'w0')
     expect(w).toContain('第一次')
   })
+
+  it('maps only the system default direction to a world-facing direction', () => {
+    expect(narrativeDirectionName({ name: '通用学习', source: 'system_default' })).toBe('旧书页间的旅途')
+    expect(narrativeDirectionName({ name: '通用学习', source: 'system_default' })).not.toBe('通用学习')
+    expect(narrativeDirectionName({ name: '准备秋招', source: 'user_created' })).toBe('准备秋招')
+  })
+
+  it('daily and weekly templates never expose the default area name', () => {
+    const facts = {
+      stats: { totalActiveSeconds: 600, previousPeriodTotalSeconds: 300 },
+      journey: { mainDirection: '通用学习', mainDirectionNarrative: { name: '通用学习', source: 'system_default' }, completedTasks: [{ title: '整理旧笔记' }] },
+      chronicle: { season: '秋' },
+      observatory: { hasWrittenReview: false },
+    }
+    expect(generateDailyTemplate(facts, 'default-area')).not.toContain('通用学习')
+    expect(generateWeeklyTemplate(facts, 'default-area')).not.toContain('通用学习')
+  })
 })
 
 describe('facts builders', () => {
   const period = { periodKey: '2026-07-20', periodStart: 1752595200000, periodEnd: 1752681600000, timezoneName: 'UTC', timezoneOffsetMinutes: 0 }
 
-  it('daily facts snapshot includes task titles (v2 schema)', () => {
+  it('daily facts snapshot includes task titles (v3 schema)', () => {
     const stats = { totalActiveSeconds: 100, sessionCounts: { brief: 0, short: 1, expedition: 0, deep: 0 }, completedTasks: [{ id: 't1', title: 'ABC' }], directionBreakdown: [], longestSessionSeconds: 100, hasOutcome: false, hasWrittenReview: false }
     const f = buildDailyLetterFacts(stats, period)
-    expect(f.schemaVersion).toBe(2)
+    expect(f.schemaVersion).toBe(3)
     expect(f.journey.completedTasks[0].title).toBe('ABC')
     expect(f.chronicle.season).toBeTruthy()
+  })
+
+  it('freezes narrative direction provenance and discoveries without replacing the raw direction', () => {
+    const stats = {
+      totalActiveSeconds: 600,
+      sessionCounts: { brief: 0, short: 2, expedition: 0, deep: 0 },
+      completedTasks: [{ id: 't1', title: '整理申请材料' }, { id: 't2', title: '修改简历' }],
+      discoveries: [{ name: '松风林入口', kind: 'node' }],
+      directionBreakdown: [{ id: 'area-1', name: '准备秋招', source: 'user_created', seconds: 600 }],
+      longestSessionSeconds: 300,
+      hasOutcome: false,
+      hasWrittenReview: false,
+    }
+    const f = buildDailyLetterFacts(stats, period)
+    expect(f.journey.mainDirection).toBe('准备秋招')
+    expect(f.journey.mainDirectionNarrative).toEqual({ name: '准备秋招', source: 'user_created' })
+    expect(f.journey.discoveries[0].name).toBe('松风林入口')
   })
 
   it('weekly facts includes daily breakdown and previous (v2 schema)', () => {
@@ -271,6 +342,12 @@ describe('facts builders', () => {
     const f = buildWeeklyLetterFacts(stats, period, 5400)
     expect(f.stats.dailyActiveSeconds).toHaveLength(7)
     expect(f.stats.previousPeriodTotalSeconds).toBe(5400)
+  })
+
+  it('freezes the selected weekly observatory note for the journey letter', () => {
+    const stats = { totalActiveSeconds: 7200, sessionCounts: { brief: 0, short: 1, expedition: 1, deep: 0 }, completedTasks: [], directionBreakdown: [], longestSessionSeconds: 3600, hasWrittenReview: true, weeklyObservatoryNote: '终于分清了两条旧路。' }
+    const f = buildWeeklyLetterFacts(stats, period, 0)
+    expect(f.observatory.weeklyNote).toBe('终于分清了两条旧路。')
   })
 })
 
@@ -381,10 +458,10 @@ describe('birthday system', () => {
 
 describe('templates are narrative, not data reports', () => {
   const bannedWords = ['小时', '分钟', '完成了', '次数', '统计', '专注', '显示', '报告', '数据',
-    '编程', '学习', '通用学习', '任务', 'paicli']
+    '通用学习', '任务', 'paicli']
   const worldWords = ['邮局', '路标', '旅途', '木匣', '行囊', '地图', '壁炉', '窗']
 
-  it('daily template has no report language or raw DB names', () => {
+  it('daily template has no report language or internal category names', () => {
     const facts = { totalActiveSeconds: 7200, completedTasks: [{ title: 'A' }], directionBreakdown: [{ name: '编程' }], hasWrittenReview: false, hasOutcome: false, periodStart: Date.now() }
     for (const seed of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
       const body = generateDailyTemplate(facts, seed)
@@ -489,6 +566,12 @@ describe('festival respects world_entered_at_ms', () => {
     const nodes = getActiveFestivalNodes(ts, mailStarted)
     const y2026 = nodes.filter((n: any) => n.year === 2026)
     expect(y2026).toHaveLength(3) // opening+midway+climax for 2026
+  })
+
+  it('does not backfill nodes from before the player entered in the same year', () => {
+    const entered = new Date(2026, 11, 1, 12).getTime()
+    const nodes = getActiveFestivalNodes(new Date(2026, 11, 2, 12).getTime(), entered)
+    expect(nodes.filter((n: any) => n.year === 2026)).toHaveLength(0)
   })
 
   it('player starting 2025-01-01 sees 2025 festival nodes (joined before festival)', () => {

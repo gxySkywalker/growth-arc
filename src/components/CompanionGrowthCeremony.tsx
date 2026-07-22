@@ -1,0 +1,78 @@
+import { useEffect, useMemo, useState } from 'react'
+import type { Companion, CompanionGrowthEvent } from '../types'
+import { PixelCompanion } from './PixelCompanion'
+import '../companion-growth-ceremony.css'
+
+type CeremonyPhase = 'notice' | 'shift' | 'reveal' | 'complete'
+
+function playGrowthChime() {
+  try {
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return
+    const context = new AudioContextCtor()
+    ;[523.25, 659.25, 783.99].forEach((frequency, index) => {
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      const start = context.currentTime + index * 0.14
+      oscillator.type = 'sine'
+      oscillator.frequency.value = frequency
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.exponentialRampToValueAtTime(0.045, start + 0.03)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.48)
+      oscillator.connect(gain).connect(context.destination)
+      oscillator.start(start)
+      oscillator.stop(start + 0.5)
+    })
+    window.setTimeout(() => void context.close(), 1200)
+  } catch {
+    // The ceremony remains fully usable when audio playback is unavailable.
+  }
+}
+
+const stageName = (companion: Companion, stage: number) => companion.species.stages[stage] || companion.stageName
+
+export function CompanionGrowthCeremony({ event, onComplete }: { event: CompanionGrowthEvent; onComplete: () => void | Promise<void> }) {
+  const [phase, setPhase] = useState<CeremonyPhase>('notice')
+  const before = useMemo<Companion>(() => ({
+    ...event.companion,
+    stage: event.previous_stage,
+    stageName: stageName(event.companion, event.previous_stage),
+    evolution_path: '',
+  }), [event])
+  const after = useMemo<Companion>(() => ({ ...event.companion, stage: event.stage, stageName: stageName(event.companion, event.stage) }), [event])
+
+  useEffect(() => {
+    playGrowthChime()
+    const shift = window.setTimeout(() => setPhase('shift'), 1300)
+    const reveal = window.setTimeout(() => setPhase('reveal'), 4200)
+    const complete = window.setTimeout(() => setPhase('complete'), 5700)
+    return () => { window.clearTimeout(shift); window.clearTimeout(reveal); window.clearTimeout(complete) }
+  }, [event.id])
+
+  const copy = phase === 'notice'
+    ? `${event.companion.nickname}的身体，好像发生了一些变化……`
+    : phase === 'shift'
+      ? '旧路的铜铃在光里轻轻响着。'
+      : phase === 'reveal'
+        ? '光慢慢安静下来。'
+        : `${before.stageName}长成了${after.stageName}。`
+
+  return <div className={`growth-ceremony growth-ceremony-${phase}`} role="dialog" aria-modal="true" aria-label={`${event.companion.nickname}的成长时刻`}>
+    <div className="growth-ceremony-stars" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+    <section className="growth-ceremony-panel">
+      <div className="growth-ceremony-title"><span>同行的长成</span><strong>{event.companion.nickname}</strong></div>
+      <div className="growth-ceremony-stage" aria-label={`${before.stageName}长成${after.stageName}`}>
+        <div className="growth-ceremony-form growth-ceremony-before"><PixelCompanion companion={before} size="large" /></div>
+        <div className="growth-ceremony-form growth-ceremony-after"><PixelCompanion companion={after} size="large" /></div>
+        <div className="growth-ceremony-flash" aria-hidden="true" />
+      </div>
+      <div className="growth-ceremony-dialogue">
+        <p>{copy}</p>
+        {phase === 'complete' && <>
+          <small>它抬起头，像是已经认得这间小屋的每一盏灯。</small>
+          <button className="button button-primary" onClick={() => void onComplete()}>把这一刻记下来</button>
+        </>}
+      </div>
+    </section>
+  </div>
+}

@@ -20,10 +20,10 @@ describe('expedition rules', () => {
     expect(first.companionSpecies).not.toBeNull()
   })
 
-  it('uses bond milestones for visible growth and chosen evolution', () => {
-    expect(companionStage(19)).toBe(0)
-    expect(companionStage(20)).toBe(1)
-    expect(evolutionReady(80)).toBe(true)
-    expect(companionStage(80, 'moon_trail')).toBe(2)
+  it('uses fixed bond chapters and resolves final growth from local time', () => {
+    expect(companionStage(99)).toBe(0)
+    expect(companionStage(100)).toBe(1)
+    expect(companionStage(200)).toBe(2)
+    expect(evolutionReady(200)).toBe(true)
   })
 })

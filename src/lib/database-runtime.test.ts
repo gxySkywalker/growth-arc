@@ -15,7 +15,101 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
+describe('AI configuration persistence', () => {
+  it('persists the canonical AI base URL and provider settings', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-ai-settings-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+
+    database.setSettings({
+      api_provider: 'deepseek',
+      model: 'deepseek-chat',
+      ai_base_url: 'https://api.deepseek.com/v1',
+    })
+
+    expect(database.getSettings()).toMatchObject({
+      api_provider: 'deepseek',
+      model: 'deepseek-chat',
+      ai_base_url: 'https://api.deepseek.com/v1',
+    })
+  })
+})
+
+describe('companion identity', () => {
+  it('keeps a renamed companion, its profile, and its memories as the same friend', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-companion-name-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const before = database.getCompanionCollection().active
+    expect(before).not.toBeNull()
+    const renamed = database.renameCompanion(before.id, '小栗')
+
+    expect(renamed.nickname).toBe('小栗')
+    expect(renamed.personalityProfile).toEqual(before.personalityProfile)
+    expect(renamed.memories[0].text).toContain('旧路')
+    expect(database.getCompanionCollection().active.nickname).toBe('小栗')
+  })
+
+  it('records a growth moment once when an expedition carries a companion across a bond chapter', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-companion-growth-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const companion = database.getCompanionCollection().active
+    const area = database.getStructure().areas[0]
+    database.run('UPDATE companions SET bond_xp = 99, stage = 0 WHERE id = ?', [companion.id])
+
+    const session = database.startSession({ areaId: area.id, content: '沿旧路返航', companionId: companion.id })
+    database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 6 * 60 * 1000, session.id])
+    const result = database.stopSession(session.id, {})
+
+    expect(result.expedition.growthEvent).toMatchObject({
+      companion_id: companion.id,
+      previous_stage: 0,
+      stage: 1,
+    })
+    expect(result.expedition.growthEvent.companion.stageName).toBe('栗鬃')
+    const pending = database.getPendingGrowthEvent()
+    expect(pending?.id).toBe(result.expedition.growthEvent.id)
+    database.markGrowthEventSeen(pending.id)
+    expect(database.getPendingGrowthEvent()).toBeNull()
+  })
+
+  it('records the same growth moment when a shared companion item crosses the bond threshold', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-companion-food-growth-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const companion = database.getCompanionCollection().active
+    const now = Date.now()
+    database.run('UPDATE companions SET bond_xp = 99, stage = 0 WHERE id = ?', [companion.id])
+    database.run('INSERT INTO inventory (item_id, quantity, first_found_at, updated_at) VALUES (?, ?, ?, ?)', ['berry_bread', 1, now, now])
+
+    const result = database.useItem('berry_bread')
+
+    expect(result.growthEvent).toMatchObject({ companion_id: companion.id, previous_stage: 0, stage: 1 })
+    expect(result.growthEvent.companion.stageName).toBe('栗鬃')
+    expect(database.getPendingGrowthEvent()?.id).toBe(result.growthEvent.id)
+  })
+})
+
 describe('local learning database', () => {
+  it('marks only the seeded area as the system default direction', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-direction-source-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const defaultArea = database.getStructure().areas[0]
+    const customArea = database.createArea({ name: '准备秋招' })
+
+    for (const area of [defaultArea, customArea]) {
+      const session = database.startSession({ areaId: area.id, content: `走向${area.name}` })
+      database.run('UPDATE focus_intervals SET started_at = ? WHERE session_id = ?', [Date.now() - 120000, session.id])
+      database.stopSession(session.id, {})
+    }
+
+    const directions = database.getCompletedStats(Date.now() - 3600000, Date.now() + 1000).directionBreakdown
+    expect(directions.find((item: { id: string }) => item.id === defaultArea.id)?.source).toBe('system_default')
+    expect(directions.find((item: { id: string }) => item.id === customArea.id)?.source).toBe('user_created')
+  })
+
   it('persists a complete focus-to-growth loop without duplicate completion XP', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'growth-arc-test-'))
     tempDirs.push(dir)
@@ -850,20 +944,22 @@ describe('letters CRUD', () => {
     })
   })
 
-  it('listLetters defaults to 50 max, cursorBefore pagination', async () => {
+  it('lets the post office turn through 100 preserved letters without changing them', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'growth-arc-pages-'))
     tempDirs.push(dir)
     const database = await new StudyDatabase(dir).init()
-    for (let i = 0; i < 55; i++) {
+    for (let i = 0; i < 100; i++) {
       database.createLetter({ id: crypto.randomUUID(), letterType: 'daily', periodKey: `2026-08-${String(i + 1).padStart(2, '0')}`, periodStart: i, periodEnd: i + 1, timezoneOffsetMinutes: 0, timezoneName: 'UTC', subject: `信${i}`, fact: {}, templateBody: `b${i}` })
+      database.run('UPDATE letters SET created_at = ?, updated_at = ? WHERE period_key = ?', [1000 + i, 1000 + i, `2026-08-${String(i + 1).padStart(2, '0')}`])
     }
-    const page1 = database.listLetters({})
+    const page1 = database.listLetters({ limit: 50, offset: 0 })
     expect(page1.length).toBe(50)
-    const oldest = page1[page1.length - 1]
-    const page2 = database.listLetters({ cursorBefore: oldest.created_at })
-    expect(page2.length).toBeGreaterThanOrEqual(4)
-    expect(page2.length).toBeLessThanOrEqual(6)
-    expect(page2[0].created_at).toBeLessThanOrEqual(oldest.created_at)
+    expect(page1[0].subject).toBe('信99')
+    const page2 = database.listLetters({ limit: 50, offset: 50 })
+    expect(page2).toHaveLength(50)
+    expect(page2[0].subject).toBe('信49')
+    expect(page2[49].subject).toBe('信0')
+    expect(database.getLetterById(page2[49].id)?.template_body).toBe('b0')
   })
 
   it('markLetterRead throws on missing id', async () => {

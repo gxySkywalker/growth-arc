@@ -27,6 +27,7 @@ const {
   shouldGenerateWeeklyLetter,
   tzInfo,
   getActiveFestivalNodes,
+  getWorldState,
   buildFestivalFacts,
   generateFestivalTemplate,
   birthdayPeriod,
@@ -39,6 +40,7 @@ const {
   rollLightweightExpedition,
   companionStage,
   evolutionReady,
+  growthPathForTime,
 } = require('./game.cjs')
 const {
   WORLD_CONTENT_NAMESPACE,
@@ -47,6 +49,30 @@ const {
   WORLD_NODES,
   WORLD_EDGES,
 } = require('./world-content.cjs')
+
+const PERSONALITY_TRAITS = ['活泼', '安静', '慢热', '胆小', '温和', '好奇', '独立', '倔强', '爱观察', '爱凑热闹', '认真', '有耐心', '贪玩', '谨慎']
+const PERSONALITY_QUIRKS = ['有点怕雷声', '对陌生声音敏感', '不喜欢改变路线', '容易担心旅人', '有点固执']
+const SPECIES_HABITS = {
+  hearth_hound: ['喜欢靠近炉火', '喜欢闻旅人带回的旧物', '喜欢把小物件放在角落', '喜欢趴门槛晒太阳'],
+}
+
+function profileForCompanion(id, speciesId) {
+  const digest = crypto.createHash('sha256').update(`${id}:${speciesId}`).digest()
+  const habits = SPECIES_HABITS[speciesId] || ['喜欢安静待在身边']
+  return {
+    personalityTrait: PERSONALITY_TRAITS[digest[0] % PERSONALITY_TRAITS.length],
+    habit: habits[digest[1] % habits.length],
+    quirk: PERSONALITY_QUIRKS[digest[2] % PERSONALITY_QUIRKS.length],
+  }
+}
+
+function parsePersonalityProfile(value, id, speciesId) {
+  try {
+    const parsed = JSON.parse(value || '')
+    if (parsed?.personalityTrait && parsed?.habit && parsed?.quirk) return parsed
+  } catch {}
+  return profileForCompanion(id, speciesId)
+}
 
 class StudyDatabase {
   constructor(dataDir) {
@@ -100,6 +126,25 @@ class StudyDatabase {
       if (!aiCols.has('ai_prompt_version')) this.db.run("ALTER TABLE letters ADD COLUMN ai_prompt_version INTEGER")
       if (!aiCols.has('ai_retry_count')) this.db.run("ALTER TABLE letters ADD COLUMN ai_retry_count INTEGER NOT NULL DEFAULT 0")
       this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '3')")
+    }
+
+    if (version < 4) {
+      // V4: companion instances carry only narrative individuality. Existing
+      // companions keep their identity and receive a deterministic profile.
+      const columns = new Set(this.all('PRAGMA table_info(companions)').map(c => c.name))
+      if (!columns.has('personality_profile_json')) this.db.run("ALTER TABLE companions ADD COLUMN personality_profile_json TEXT NOT NULL DEFAULT ''")
+      if (!columns.has('growth_completed_at')) this.db.run('ALTER TABLE companions ADD COLUMN growth_completed_at INTEGER')
+      const rows = this.all('SELECT id, species_id, personality_profile_json, evolution_path, bond_xp FROM companions')
+      for (const row of rows) {
+        const profile = parsePersonalityProfile(row.personality_profile_json, row.id, row.species_id)
+        let path = row.evolution_path || ''
+        // Preserve the intent of pre-v2 Chestnut saves without retaining old
+        // player-facing names. New growth is resolved from actual local time.
+        if (row.species_id === 'hearth_hound' && path === 'hearth_guard') path = 'ember_tail'
+        if (row.species_id === 'hearth_hound' && path === 'moon_trail') path = 'moon_paw'
+        this.run('UPDATE companions SET personality_profile_json = ?, evolution_path = ? WHERE id = ?', [JSON.stringify(profile), path, row.id], false)
+      }
+      this.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '4')")
     }
   }
 
@@ -200,9 +245,22 @@ class StudyDatabase {
         bond_xp INTEGER NOT NULL DEFAULT 0,
         stage INTEGER NOT NULL DEFAULT 0,
         evolution_path TEXT NOT NULL DEFAULT '',
+        personality_profile_json TEXT NOT NULL DEFAULT '',
+        growth_completed_at INTEGER,
         is_active INTEGER NOT NULL DEFAULT 0,
         met_at INTEGER NOT NULL,
         last_adventure_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS companion_growth_events (
+        id TEXT PRIMARY KEY,
+        companion_id TEXT NOT NULL REFERENCES companions(id) ON DELETE CASCADE,
+        previous_stage INTEGER NOT NULL,
+        stage INTEGER NOT NULL,
+        evolution_path TEXT NOT NULL DEFAULT '',
+        source_session_id TEXT REFERENCES focus_sessions(id) ON DELETE SET NULL,
+        occurred_at INTEGER NOT NULL,
+        seen_at INTEGER,
+        UNIQUE(companion_id, stage)
       );
       CREATE TABLE IF NOT EXISTS inventory (
         item_id TEXT PRIMARY KEY,
@@ -308,6 +366,7 @@ class StudyDatabase {
       CREATE INDEX IF NOT EXISTS idx_sessions_started ON focus_sessions(started_at);
       CREATE INDEX IF NOT EXISTS idx_intervals_session ON focus_intervals(session_id);
       CREATE INDEX IF NOT EXISTS idx_companions_active ON companions(is_active);
+      CREATE INDEX IF NOT EXISTS idx_companion_growth_events_pending ON companion_growth_events(seen_at, occurred_at);
       CREATE TABLE IF NOT EXISTS session_task_links (
         session_id TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,
         task_id TEXT NOT NULL,
@@ -377,9 +436,11 @@ class StudyDatabase {
   seed() {
     const now = Date.now()
     if (!this.one('SELECT id FROM areas LIMIT 1')) {
+      const defaultAreaId = crypto.randomUUID()
       this.run('INSERT INTO areas (id, name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)', [
-        crypto.randomUUID(), '通用学习', '#79c0ff', 'book', now,
+        defaultAreaId, '通用学习', '#79c0ff', 'book', now,
       ], false)
+      this.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', ['system_default_area_id', defaultAreaId], false)
     }
     const defaults = {
       user_name: '学习者',
@@ -390,13 +451,22 @@ class StudyDatabase {
       rare_pity: '0',
       companion_pity: '0',
       api_provider: 'openai',
+      ai_base_url: '',
       proxy_url: '',
     }
     for (const [key, value] of Object.entries(defaults)) {
       this.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value], false)
     }
+    // The original seeded area is the only internal direction.  Keep its id
+    // outside the area row so user-created areas with the same name remain
+    // user-owned narrative material.
+    if (!this.one("SELECT value FROM settings WHERE key = 'system_default_area_id'")) {
+      const legacyDefault = this.one("SELECT id FROM areas WHERE name = '通用学习' AND color = '#79c0ff' AND icon = 'book' ORDER BY created_at LIMIT 1")
+      if (legacyDefault) this.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', ['system_default_area_id', legacyDefault.id], false)
+    }
     if (!this.one('SELECT id FROM companions LIMIT 1')) {
-      this.run("INSERT INTO companions (id, species_id, nickname, is_active, met_at) VALUES (?, 'hearth_hound', '栗子', 1, ?)", [crypto.randomUUID(), now], false)
+      const id = crypto.randomUUID()
+      this.run("INSERT INTO companions (id, species_id, nickname, personality_profile_json, is_active, met_at) VALUES (?, 'hearth_hound', '栗子', ?, 1, ?)", [id, JSON.stringify(profileForCompanion(id, 'hearth_hound')), now], false)
     }
     this.seedWorldFoundation(now)
     this.save()
@@ -501,7 +571,7 @@ class StudyDatabase {
   setSettings(values) {
     this.transaction(() => {
       for (const [key, value] of Object.entries(values)) {
-        if (!['user_name', 'model', 'theme', 'accent', 'world_name', 'birthday', 'proxy_url', 'api_provider'].includes(key)) continue
+        if (!['user_name', 'model', 'theme', 'accent', 'world_name', 'birthday', 'proxy_url', 'ai_base_url', 'api_provider'].includes(key)) continue
         this.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)], false)
       }
     })
@@ -1020,12 +1090,17 @@ class StudyDatabase {
     }
 
     let activeCompanion = null
+    let growthEvent = null
     if (companionId) {
       const current = this.one('SELECT * FROM companions WHERE id = ?', [companionId])
       if (current) {
+        const previousStage = companionStage(current.bond_xp)
         const bondXp = Number(current.bond_xp) + rolled.bondXp
-        const stage = companionStage(bondXp, current.evolution_path)
-        this.run('UPDATE companions SET bond_xp = ?, stage = ?, last_adventure_at = ? WHERE id = ?', [bondXp, stage, createdAt, companionId], false)
+        const stage = companionStage(bondXp)
+        const growthPath = stage === 2 && !current.evolution_path ? growthPathForTime(createdAt) : current.evolution_path
+        const growthCompletedAt = stage === 2 && !current.evolution_path ? createdAt : current.growth_completed_at
+        this.run('UPDATE companions SET bond_xp = ?, stage = ?, evolution_path = ?, growth_completed_at = ?, last_adventure_at = ? WHERE id = ?', [bondXp, stage, growthPath, growthCompletedAt, createdAt, companionId], false)
+        growthEvent = this.createGrowthEvent({ companionId, previousStage, stage, evolutionPath: growthPath, sourceSessionId: sessionId, occurredAt: createdAt })
         activeCompanion = this.getCompanion(companionId)
       }
     }
@@ -1033,8 +1108,8 @@ class StudyDatabase {
     let newCompanion = null
     if (rolled.companionSpecies) {
       const newId = crypto.randomUUID()
-      this.run('INSERT OR IGNORE INTO companions (id, species_id, nickname, met_at, last_adventure_at) VALUES (?, ?, ?, ?, ?)',
-        [newId, rolled.companionSpecies.id, rolled.companionSpecies.kind, createdAt, createdAt], false)
+      this.run('INSERT OR IGNORE INTO companions (id, species_id, nickname, personality_profile_json, met_at, last_adventure_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [newId, rolled.companionSpecies.id, rolled.companionSpecies.kind, JSON.stringify(profileForCompanion(newId, rolled.companionSpecies.id)), createdAt, createdAt], false)
       const row = this.one('SELECT * FROM companions WHERE species_id = ?', [rolled.companionSpecies.id])
       newCompanion = row ? this.enrichCompanion(row) : null
     }
@@ -1052,6 +1127,7 @@ class StudyDatabase {
       bondXp: rolled.bondXp,
       activeCompanion,
       newCompanion,
+      growthEvent,
     }
     this.run(`INSERT INTO expeditions (session_id, tier_id, location, event_text, rewards_json, rare_found, companion_found_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
@@ -1165,6 +1241,7 @@ class StudyDatabase {
       bondXp: rewards.bondXp,
       activeCompanion: rewards.activeCompanion,
       newCompanion: rewards.newCompanion,
+      growthEvent: rewards.growthEvent || null,
       knowledgeRelic: this.one('SELECT * FROM knowledge_relics WHERE session_id = ?', [sessionId]),
       createdAt: row.created_at,
       returnKind,
@@ -1174,16 +1251,61 @@ class StudyDatabase {
   enrichCompanion(row) {
     const species = COMPANION_SPECIES.find((item) => item.id === row.species_id)
     if (!species) return { ...row, species: null, stageName: '未知伙伴', evolutionReady: false }
-    const stage = companionStage(row.bond_xp, row.evolution_path)
+    const stage = companionStage(row.bond_xp)
     const chosenEvolution = species.evolutions.find((item) => item.id === row.evolution_path)
     return {
       ...row,
       stage,
       species,
+      personalityProfile: parsePersonalityProfile(row.personality_profile_json, row.id, row.species_id),
       stageName: chosenEvolution?.name || species.stages[stage],
       evolutionReady: evolutionReady(row.bond_xp, row.evolution_path),
-      nextBondXp: stage === 0 ? 20 : stage === 1 ? 80 : Number(row.bond_xp),
+      nextBondXp: stage === 0 ? 100 : stage === 1 ? 200 : Number(row.bond_xp),
+      memories: this.getCompanionMemories(row),
     }
+  }
+
+  getCompanionMemories(companion) {
+    const journeys = this.all(`SELECT e.location, e.event_text, e.created_at
+      FROM expeditions e
+      JOIN focus_sessions s ON s.id = e.session_id
+      WHERE s.companion_id = ? ORDER BY e.created_at DESC LIMIT 3`, [companion.id])
+    const profile = parsePersonalityProfile(companion.personality_profile_json, companion.id, companion.species_id)
+    const first = companion.species_id === 'hearth_hound'
+      ? '抵达边境小镇前，栗子已经在旧路上与你同行。'
+      : '你们的相遇，被收进了旅途的第一页。'
+    return [
+      { kind: 'first', text: first, at: companion.met_at },
+      ...journeys.map((journey) => ({ kind: 'journey', text: `在${journey.location}，${journey.event_text}`, at: journey.created_at })),
+      ...(journeys.length === 0 ? [{ kind: 'habit', text: `${profile.habit}。这是它留在小屋里的小小习惯。`, at: companion.met_at }] : []),
+    ]
+  }
+
+  createGrowthEvent({ companionId, previousStage, stage, evolutionPath, sourceSessionId, occurredAt }) {
+    if (stage <= previousStage) return null
+    const id = crypto.randomUUID()
+    this.run(`INSERT OR IGNORE INTO companion_growth_events
+      (id, companion_id, previous_stage, stage, evolution_path, source_session_id, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [id, companionId, previousStage, stage, evolutionPath || '', sourceSessionId || null, occurredAt], false)
+    const event = this.one('SELECT * FROM companion_growth_events WHERE companion_id = ? AND stage = ?', [companionId, stage])
+    return event ? this.enrichGrowthEvent(event) : null
+  }
+
+  enrichGrowthEvent(event) {
+    const companion = this.getCompanion(event.companion_id)
+    return { ...event, companion }
+  }
+
+  getPendingGrowthEvent() {
+    const event = this.one('SELECT * FROM companion_growth_events WHERE seen_at IS NULL ORDER BY occurred_at ASC LIMIT 1')
+    return event ? this.enrichGrowthEvent(event) : null
+  }
+
+  markGrowthEventSeen(id) {
+    const event = this.one('SELECT * FROM companion_growth_events WHERE id = ?', [id])
+    if (!event) throw new Error('成长记录不存在')
+    this.run('UPDATE companion_growth_events SET seen_at = ? WHERE id = ?', [Date.now(), id])
+    return this.enrichGrowthEvent(this.one('SELECT * FROM companion_growth_events WHERE id = ?', [id]))
   }
 
   getCompanion(id) {
@@ -1211,13 +1333,23 @@ class StudyDatabase {
     return this.getCompanionCollection()
   }
 
-  evolveCompanion(id, pathId) {
+  renameCompanion(id, nickname) {
+    const companion = this.one('SELECT id FROM companions WHERE id = ?', [id])
+    if (!companion) throw new Error('伙伴不存在')
+    const name = String(nickname || '').trim().replace(/\s+/g, ' ')
+    if (!name) throw new Error('请先写下想称呼它的名字')
+    if (Array.from(name).length > 12) throw new Error('伙伴名字请控制在 12 个字以内')
+    this.run('UPDATE companions SET nickname = ? WHERE id = ?', [name, id])
+    return this.getCompanion(id)
+  }
+
+  evolveCompanion(id) {
     const companion = this.getCompanion(id)
     if (!companion) throw new Error('伙伴不存在')
     if (!companion.evolutionReady) throw new Error('羁绊尚未达到进化条件')
-    const path = companion.species.evolutions.find((item) => item.id === pathId)
-    if (!path) throw new Error('进化方向不存在')
-    this.run('UPDATE companions SET evolution_path = ?, stage = 2 WHERE id = ?', [pathId, id])
+    const completedAt = Date.now()
+    const pathId = growthPathForTime(completedAt)
+    this.run('UPDATE companions SET evolution_path = ?, stage = 2, growth_completed_at = ? WHERE id = ?', [pathId, completedAt, id])
     return this.getCompanion(id)
   }
 
@@ -1233,14 +1365,26 @@ class StudyDatabase {
     if (!entry || Number(entry.quantity) <= 0) throw new Error('物品不足')
     const now = Date.now()
     let effect = ''
+    let growthEvent = null
 
     if (itemId === 'berry_bread') {
       const active = this.one('SELECT * FROM companions WHERE is_active = 1')
       if (!active) throw new Error('没有同行伙伴可以分享面包')
+      const previousStage = companionStage(active.bond_xp)
       const newBond = Number(active.bond_xp) + 10
-      const stage = companionStage(newBond, active.evolution_path)
-      this.run('UPDATE companions SET bond_xp = ?, stage = ? WHERE id = ?', [newBond, stage, active.id], false)
-      effect = `${active.nickname || '伙伴'}的羁绊 +10`
+      const stage = companionStage(newBond)
+      const growthPath = stage === 2 && !active.evolution_path ? growthPathForTime(now) : active.evolution_path
+      const growthCompletedAt = stage === 2 && !active.evolution_path ? now : active.growth_completed_at
+      this.run('UPDATE companions SET bond_xp = ?, stage = ?, evolution_path = ?, growth_completed_at = ? WHERE id = ?', [newBond, stage, growthPath, growthCompletedAt, active.id], false)
+      growthEvent = this.createGrowthEvent({
+        companionId: active.id,
+        previousStage,
+        stage,
+        evolutionPath: growthPath,
+        sourceSessionId: null,
+        occurredAt: now,
+      })
+      effect = `${active.nickname || '伙伴'}把这份莓果面包记在了共同旅途中。`
     } else if (itemId === 'copper_coin') {
       this.insertXp('item', 5, 'item', itemId, '使用旧王朝铜币', false)
       effect = '经验 +5'
@@ -1255,7 +1399,7 @@ class StudyDatabase {
 
     this.run('UPDATE inventory SET quantity = quantity - 1, updated_at = ? WHERE item_id = ?', [now, itemId])
     this.save()
-    return { consumed: true, itemId, effect }
+    return { consumed: true, itemId, effect, growthEvent }
   }
 
   getKnowledgeRelics(limit = 8) {
@@ -1272,6 +1416,7 @@ class StudyDatabase {
       inventory: this.getInventory(),
       relics: this.getKnowledgeRelics(6),
       latestExpedition: latest ? this.getExpedition(latest.session_id) : null,
+      pendingGrowthEvent: this.getPendingGrowthEvent(),
       rarePity: Number(settings.rare_pity || 0),
       companionPity: Number(settings.companion_pity || 0),
     }
@@ -1425,6 +1570,7 @@ class StudyDatabase {
   // Completed-only statistics for observatory and letter facts.
   // Running/paused sessions are excluded; use getDashboard() for live overlay.
   getCompletedStats(start, end) {
+    const systemDefaultAreaId = this.one("SELECT value FROM settings WHERE key = 'system_default_area_id'")?.value || null
     const sessions = this.all(
       "SELECT s.active_seconds, s.area_id, a.name AS area_name, a.color AS area_color FROM focus_sessions s LEFT JOIN areas a ON a.id = s.area_id WHERE s.status = 'completed' AND s.ended_at >= ? AND s.ended_at < ?",
       [start, end],
@@ -1439,7 +1585,13 @@ class StudyDatabase {
     for (const s of sessions) {
       if (!s.area_id) continue
       const key = s.area_id
-      const existing = byArea.get(key) || { id: key, name: s.area_name || key, color: s.area_color || '', seconds: 0 }
+      const existing = byArea.get(key) || {
+        id: key,
+        name: s.area_name || key,
+        color: s.area_color || '',
+        source: key === systemDefaultAreaId && s.area_name === '通用学习' ? 'system_default' : 'user_created',
+        seconds: 0,
+      }
       existing.seconds += Number(s.active_seconds || 0)
       byArea.set(key, existing)
     }
@@ -1491,7 +1643,7 @@ class StudyDatabase {
     return { ...row, fact: JSON.parse(row.fact_json) }
   }
 
-  listLetters({ limit = 50, unreadOnly = false, letterType, cursorBefore } = {}) {
+  listLetters({ limit = 50, offset = 0, unreadOnly = false, letterType, cursorBefore } = {}) {
     const clauses = []
     const params = []
     if (unreadOnly) { clauses.push('is_read = 0'); }
@@ -1499,7 +1651,8 @@ class StudyDatabase {
     if (cursorBefore !== undefined) { clauses.push('(created_at < ? OR (created_at = ? AND id < ?))'); params.push(cursorBefore, cursorBefore, cursorBefore); }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const take = Math.max(1, Math.min(Number(limit) || 50, 200))
-    const rows = this.all(`SELECT * FROM letters ${where} ORDER BY created_at DESC, id DESC LIMIT ?`, [...params, take])
+    const skip = Math.max(0, Math.floor(Number(offset) || 0))
+    const rows = this.all(`SELECT * FROM letters ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, [...params, take, skip])
     return rows.map(row => ({ ...row, fact: JSON.parse(row.fact_json) }))
   }
 
@@ -1563,6 +1716,7 @@ class StudyDatabase {
           const prev = previousWeeklyPeriod(period.periodStart)
           return this.getCompletedStats(prev.periodStart, prev.periodEnd).totalActiveSeconds
         })() : undefined)
+    factObj.worldState = getWorldState(period.periodKey)
     const templateBody = letterType === 'daily'
       ? generateDailyTemplate(factObj, seed)
       : generateWeeklyTemplate(factObj, seed)

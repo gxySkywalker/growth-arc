@@ -68,6 +68,7 @@ function ipcToLetter(item: LetterListItem, detail?: { body: string; factSummary:
 // ── Session persistence (notes & memories only — read/reply migrate to IPC) ──
 const SK_NOTES = 'growth-arc.post-office.prototype.notes'
 const SK_MEMORIES = 'growth-arc.post-office.prototype.memories'
+const HISTORY_BATCH_SIZE = 50
 
 function loadJson<T>(key: string, fallback: T): T {
   try { const raw = sessionStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback }
@@ -92,7 +93,7 @@ type InteractionMode = 'note' | 'memory' | 'reply' | 'none'
 
 function emptyMessage(cat: MockCategory): string {
   if (cat === 'daily') return '今天还没有来信。\n完成一次远征后，小天使会整理今日的足迹。'
-  if (cat === 'weekly') return '这里还没有周报。\n完整的一周结束后，旅途札记会出现。'
+  if (cat === 'weekly') return '这一页木格还空着。\n下一段旅途结束后，小天使会替你收好新的星页。'
   if (cat === 'festival') return '这里暂时没有节庆来信。\n归灯季到来时，会有新的消息。'
   if (cat === 'memorial') return '纪念来信将在未来开启。\n那些重要的日子会被记得。'
   if (cat === 'world') return '还没有来自友人的消息。\n商队和旅人的信会随着时间抵达。'
@@ -125,6 +126,8 @@ export function PostOfficePage({ onNavigate, navState, dispatch, actionsRef }: P
   // ── Real mail data from IPC ─────────────────────────────────
   const [ipcLetters, setIpcLetters] = useState<LetterListItem[] | null>(null)
   const [ipcLoading, setIpcLoading] = useState(true)
+  const [hasOlderLetters, setHasOlderLetters] = useState(false)
+  const [loadingOlderLetters, setLoadingOlderLetters] = useState(false)
   const detailCache = useRef<Map<string, { body: string; factSummary: any; replyText: string | null; aiStatus?: string }>>(new Map())
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [replyMap, setReplyMap] = useState<Record<string, string>>({})
@@ -134,9 +137,10 @@ export function PostOfficePage({ onNavigate, navState, dispatch, actionsRef }: P
     let cancelled = false
     async function init() {
       try {
-        const list = await window.growthArc.mail.list()
+        const list = await window.growthArc.mail.list({ limit: HISTORY_BATCH_SIZE, offset: 0 })
         if (cancelled) return
         setIpcLetters(list)
+        setHasOlderLetters(list.length === HISTORY_BATCH_SIZE)
         setReadIds(new Set(list.filter(l => l.isRead).map(l => l.id)))
       } catch (e) {
         console.warn('[mail] IPC init failed', e)
@@ -147,6 +151,24 @@ export function PostOfficePage({ onNavigate, navState, dispatch, actionsRef }: P
     init()
     return () => { cancelled = true }
   }, [])
+
+  const loadOlderLetters = useCallback(async () => {
+    if (loadingOlderLetters || !hasOlderLetters) return
+    setLoadingOlderLetters(true)
+    try {
+      const offset = ipcLetters?.length || 0
+      const older = await window.growthArc.mail.list({ limit: HISTORY_BATCH_SIZE, offset })
+      setIpcLetters((current) => {
+        const existing = new Set((current || []).map((letter) => letter.id))
+        return [...(current || []), ...older.filter((letter) => !existing.has(letter.id))]
+      })
+      setHasOlderLetters(older.length === HISTORY_BATCH_SIZE)
+    } catch (error) {
+      console.warn('[mail] older letters could not be opened', error)
+    } finally {
+      setLoadingOlderLetters(false)
+    }
+  }, [hasOlderLetters, ipcLetters, loadingOlderLetters])
 
   const [noteMap, setNoteMap] = useState<Record<string, string>>(() => loadJson(SK_NOTES, {}))
   const [memoryMap, setMemoryMap] = useState<Record<string, string>>(() => loadJson(SK_MEMORIES, {}))
@@ -352,6 +374,7 @@ export function PostOfficePage({ onNavigate, navState, dispatch, actionsRef }: P
         })}
         {letters.length === 0 && <div className="mail-empty">{emptyMessage(activeCategory)}</div>}
       </div>
+      {hasOlderLetters && <div style={{padding:'8px 12px 12px', textAlign:'center'}}><button className="text-button" disabled={loadingOlderLetters} onClick={loadOlderLetters}>{loadingOlderLetters ? '小天使正在翻找旧木格…' : '翻阅旧信'}</button></div>}
     </div>
   )
 

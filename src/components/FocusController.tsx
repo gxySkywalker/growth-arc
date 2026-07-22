@@ -5,7 +5,8 @@ import { Icon } from './Icon'
 import { Modal } from './Modal'
 import { setInputContext, getInputContext } from '../lib/inputContext'
 import { PixelCompanion } from './PixelCompanion'
-import type { ExpeditionResult } from '../types'
+import { CompanionGrowthCeremony } from './CompanionGrowthCeremony'
+import type { CompanionGrowthEvent, ExpeditionResult } from '../types'
 import { bgm } from '../lib/audio'
 
 const DURATION_OPTIONS = [15, 25, 45, 60, 90]
@@ -30,6 +31,7 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
   const [startOpen, setStartOpen] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
   const [expedition, setExpedition] = useState<ExpeditionResult | null>(null)
+  const [growthEvent, setGrowthEvent] = useState<CompanionGrowthEvent | null>(null)
   const [stopResult, setStopResult] = useState<{ primaryTask: any; contributedTasks: any[]; xpAwarded: number; session: any } | null>(null)
   const [taskId, setTaskId] = useState('')
   const [areaId, setAreaId] = useState('')
@@ -47,7 +49,7 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
 
   // ── Dialog input context ──────────────────────────────────
   useEffect(() => {
-    if (startOpen || stopOpen || confirmCancelOpen || expedition) {
+    if (startOpen || stopOpen || confirmCancelOpen || expedition || growthEvent) {
       setInputContext('dialog')
     } else {
       setInputContext('menu') // restore menu context when all dialogs close
@@ -221,6 +223,23 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
   const drops = expedition?.drops ?? []
   const hasRelic = !!expedition?.knowledgeRelic
   const compactRewards = drops.length <= 2 && !expedition?.rareFound
+  const returnToHome = () => {
+    const event = expedition?.growthEvent || null
+    setExpedition(null)
+    setStopResult(null)
+    if (event) setGrowthEvent(event)
+  }
+  const completeGrowthCeremony = async () => {
+    if (!growthEvent) return
+    try {
+      await window.growthArc.companions.markGrowthSeen(growthEvent.id)
+      await refresh()
+    } catch (error) {
+      notify(friendlyError(error), 'error')
+    } finally {
+      setGrowthEvent(null)
+    }
+  }
 
   return <>
     {activeSession ? <section className={`focus-expedition ${activeSession.status === 'paused' ? 'is-paused' : ''}`}>
@@ -361,9 +380,9 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
     {/* 远征归来结果 */}
     {expedition && (
       isLightweight ? (
-        <div className="modal-backdrop" onClick={() => { setExpedition(null); setStopResult(null) }}>
+        <div className="modal-backdrop" onClick={returnToHome}>
           <div className="modal return-brief-card">
-            <header className="modal-header"><h2>{expedition.returnKind === 'brief' ? '短途折返' : '短程归来'}</h2><button className="icon-button" onClick={() => { setExpedition(null); setStopResult(null) }} aria-label="关闭"><Icon name="close" /></button></header>
+            <header className="modal-header"><h2>{expedition.returnKind === 'brief' ? '短途折返' : '短程归来'}</h2><button className="icon-button" onClick={returnToHome} aria-label="关闭"><Icon name="close" /></button></header>
             <div className="modal-body return-brief-body">
               <div className="return-brief-hero">
                 {expedition.activeCompanion ? (
@@ -391,11 +410,11 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
                 </div>
               )}
             </div>
-            <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>回到小屋</button></footer>
+            <footer className="modal-footer"><button className="button button-primary" onClick={returnToHome}>回到小屋</button></footer>
           </div>
         </div>
       ) : (
-        <Modal title="远征归来" onClose={() => { setExpedition(null); setStopResult(null) }} size="wide" className="return-result-modal">
+        <Modal title="远征归来" onClose={returnToHome} size="wide" className="return-result-modal">
         <div className="return-result-scroll">
           <div className={`return-scene${isCompactScene ? ' return-scene-compact' : ''}`}>
             <span className="return-tier">{expedition.tier.name}</span><h2>{expedition.location}</h2><p>{expedition.event}</p>
@@ -432,9 +451,10 @@ export function FocusController({ showLauncher = true }: { showLauncher?: boolea
             {expedition.newCompanion && <div className="new-friend"><PixelCompanion companion={expedition.newCompanion} size="medium" /><div><small>旅途中传来了新的脚步声</small><h3>遇见了 {expedition.newCompanion.species.name}</h3><p>{expedition.newCompanion.species.description}</p></div></div>}
           </div>
         </div>
-        <footer className="modal-footer"><button className="button button-primary" onClick={() => { setExpedition(null); setStopResult(null) }}>把宝藏放回小屋</button></footer>
+        <footer className="modal-footer"><button className="button button-primary" onClick={returnToHome}>把宝藏放回小屋</button></footer>
       </Modal>
     ))}
+    {growthEvent && <CompanionGrowthCeremony event={growthEvent} onComplete={completeGrowthCeremony} />}
   </>
 }
 

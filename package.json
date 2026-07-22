@@ -10,7 +10,7 @@
     "prebuild": "npm run art:validate",
     "build": "tsc -p tsconfig.app.json && vite build",
     "start": "npm run build && electron .",
-    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts src/lib/cottage-scene.test.ts src/lib/observatory.test.ts",
+    "test": "vitest run src/lib/domain-runtime.test.ts src/lib/game-runtime.test.ts src/lib/database-runtime.test.ts src/lib/cottage-scene.test.ts src/lib/observatory.test.ts src/lib/angel-ai-runtime.test.ts",
     "test:mail-lifecycle": "node scripts/test-mail-lifecycle.mjs",
     "test:ai-narrative": "node scripts/test-ai-narrative.mjs",
     "test:watch": "vitest",
@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "echarts": "^6.1.0",
+    "pixi.js": "^8.19.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "sql.js": "^1.14.1"

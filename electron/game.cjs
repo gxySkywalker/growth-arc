@@ -3,15 +3,16 @@ const crypto = require('node:crypto')
 const COMPANION_SPECIES = [
   {
     id: 'hearth_hound',
-    name: '炉边小猎犬',
-    kind: '小狗',
+    name: '炉尾',
+    kind: '边境同行犬',
     rarity: 'starter',
     palette: 'honey',
-    description: '喜欢蜷在壁炉旁，也愿意陪你走进任何一条陌生小路。',
-    stages: ['绒耳幼犬', '篝火猎犬', '炉心守卫'],
+    description: '与你走过抵达边境前的旧路。它记得回家的方向，也记得总要回头确认你是否跟在身后。',
+    stages: ['炉尾', '栗鬃', '长成'],
     evolutions: [
-      { id: 'hearth_guard', name: '炉心守卫', note: '更喜欢守护营地与同伴。' },
-      { id: 'moon_trail', name: '月径猎犬', note: '更向往夜色中的远方。' },
+      { id: 'ember_tail', name: '炭尾', note: '在白日的炉火与归途中长成。' },
+      { id: 'pine_shadow', name: '松影', note: '在傍晚的风与林影之间长成。' },
+      { id: 'moon_paw', name: '月爪', note: '在夜色、地图与远路旁长成。' },
     ],
   },
   {
@@ -191,14 +192,21 @@ function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity 
   }
 }
 
-function companionStage(bondXp, evolutionPath = '') {
-  if (evolutionPath && Number(bondXp) >= 80) return 2
-  if (Number(bondXp) >= 20) return 1
+function companionStage(bondXp) {
+  if (Number(bondXp) >= 200) return 2
+  if (Number(bondXp) >= 100) return 1
   return 0
 }
 
 function evolutionReady(bondXp, evolutionPath = '') {
-  return Number(bondXp) >= 80 && !evolutionPath
+  return Number(bondXp) >= 200 && !evolutionPath
+}
+
+function growthPathForTime(timestamp = Date.now()) {
+  const hour = new Date(timestamp).getHours()
+  if (hour >= 6 && hour < 16) return 'ember_tail'
+  if (hour >= 16 && hour < 20) return 'pine_shadow'
+  return 'moon_paw'
 }
 
 const BRIEF_LOCATIONS = ['小屋门前', '城镇路口', '营地附近', '旧路起点']
@@ -250,4 +258,5 @@ module.exports = {
   rollLightweightExpedition,
   companionStage,
   evolutionReady,
+  growthPathForTime,
 }

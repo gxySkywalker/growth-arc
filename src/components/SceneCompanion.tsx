@@ -1,5 +1,5 @@
 import type { Companion } from '../types'
-import hearthHound from '../../assets/art/characters/companions/hearth_hound_idle_provisional_v1.png'
+import { HearthHoundSprite } from './HearthHoundSprite'
 
 const PALETTES: Record<string, { main: string; dark: string; light: string; accent: string }> = {
   honey: { main: '#b87f46', dark: '#382319', light: '#efbd73', accent: '#4f5d35' },
@@ -33,7 +33,7 @@ export function SceneCompanion({
     aria-label={companion ? `常伴伙伴${companion.nickname}` : '常伴伙伴'}
   >
     {isStarterHound
-      ? <img src={hearthHound} alt='' draggable={false} />
+      ? <HearthHoundSprite size='scene' direction={facing === 'right' ? 'right' : 'left'} />
       : <svg viewBox='0 0 32 32' shapeRendering='crispEdges' aria-hidden='true'>
           <rect x='7' y='24' width='20' height='3' fill='#261a13' opacity='.55' />
           <rect x='9' y='13' width='16' height='12' fill={palette.dark} />

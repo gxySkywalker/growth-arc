@@ -80,6 +80,65 @@
   ],
   "references": [
     {
+      "id": "hearth-hound-camp-portrait-v1",
+      "path": "characters/companions/hearth_hound_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "用于伙伴营地的大型静态展示，不作为 32×32 场景 sprite",
+        "保留已确认的栗子角色设计；成长形态沿用同一命名契约自动选择对应肖像"
+      ]
+    },
+    {
+      "id": "hearth-hound-walk-32-v1",
+      "path": "characters/companions/hearth_hound_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "四行四列：front、back、left、right；每行四帧",
+        "由已确认的原始 walk atlas 以 nearest-neighbor 缩放为 32×32 单帧，用于小屋与伙伴列表"
+      ]
+    },
+    {
+      "id": "hearth-hound-stage-1-camp-portrait-v1",
+      "path": "characters/companions/hearth_hound_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "栗鬃阶段的营地肖像；由 companion.stage 自动选择",
+        "保留铜铃、栗色毛发与更丰厚的鬃毛轮廓"
+      ]
+    },
+    {
+      "id": "hearth-hound-stage-1-walk-32-v1",
+      "path": "characters/companions/hearth_hound_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "栗鬃四行四列：front、back、left、right；每行四帧",
+        "运行时以略大于炉尾的显示比例渲染，脚底保持同一基线"
+      ]
+    },
+    {
+      "id": "player-walk-32x48-v1",
+      "path": "characters/player/player_walk_32x48_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "四行四列：front、back、left、right；每行四帧，单帧 32×48",
+        "由已确认的旅人设计图以 nearest-neighbor 裁切，棋盘背景已转为透明"
+      ]
+    },
+    {
+      "id": "player-idle-front-32x48-v1",
+      "path": "characters/player/player_idle_front_32x48_v1.png",
+      "role": "approved-runtime-fallback-sprite",
+      "status": "production-candidate",
+      "notes": [
+        "取自 player-walk-32x48-v1 的正面第一帧，用于非 Pixi 回退层"
+      ]
+    },
+    {
       "id": "protagonist-style-key-v1",
       "path": "reference/protagonist-style-key-v1.png",
       "role": "style-key",

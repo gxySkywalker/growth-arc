@@ -84,6 +84,13 @@ export interface Companion {
   evolution_path: string
   evolutionReady: boolean
   nextBondXp: number
+  growth_completed_at?: number | null
+  personalityProfile: {
+    personalityTrait: string
+    habit: string
+    quirk: string
+  }
+  memories: Array<{ kind: 'first' | 'journey' | 'habit'; text: string; at: number }>
   is_active: number
   met_at: number
   last_adventure_at: number | null
@@ -95,6 +102,18 @@ export interface CompanionCollection {
   active: Companion | null
   catalog: CompanionSpecies[]
   total: number
+}
+
+export interface CompanionGrowthEvent {
+  id: string
+  companion_id: string
+  previous_stage: number
+  stage: number
+  evolution_path: string
+  source_session_id: string | null
+  occurred_at: number
+  seen_at: number | null
+  companion: Companion
 }
 
 export interface LootItem {
@@ -235,6 +254,7 @@ export interface ExpeditionResult {
   bondXp: number
   activeCompanion: Companion | null
   newCompanion: Companion | null
+  growthEvent?: CompanionGrowthEvent | null
   knowledgeRelic: KnowledgeRelic | null
   returnKind?: 'brief' | 'short' | 'expedition' | 'deep'
   createdAt?: number
@@ -247,6 +267,7 @@ export interface WorldState {
   inventory: Array<{ item_id: string; quantity: number; item: LootItem; updated_at: number }>
   relics: KnowledgeRelic[]
   latestExpedition: ExpeditionResult | null
+  pendingGrowthEvent: CompanionGrowthEvent | null
   rarePity: number
   companionPity: number
 }
@@ -371,6 +392,9 @@ export interface GrowthArcApi {
   companions: {
     get: () => Promise<CompanionCollection>
     setActive: (id: string) => Promise<CompanionCollection>
+    rename: (id: string, nickname: string) => Promise<Companion>
+    getPendingGrowth: () => Promise<CompanionGrowthEvent | null>
+    markGrowthSeen: (id: string) => Promise<CompanionGrowthEvent>
     evolve: (id: string, pathId: string) => Promise<Companion>
   }
   history: (limit?: number) => Promise<FocusSession[]>
@@ -393,7 +417,7 @@ export interface GrowthArcApi {
     generate: (type: 'daily' | 'weekly', date: string) => Promise<{ report: AiReport; model: string }>
   }
   inventory: {
-    use: (itemId: string) => Promise<{ consumed: boolean; itemId: string; effect: string }>
+    use: (itemId: string) => Promise<{ consumed: boolean; itemId: string; effect: string; growthEvent?: CompanionGrowthEvent | null }>
   }
   observatory: {
     getDaily: (dateOrTimestamp?: number) => Promise<DailyObservatoryData>
@@ -402,7 +426,7 @@ export interface GrowthArcApi {
     saveReview: (data: { date: string; win: string; blocker: string; energy: number | null; tomorrowTask: string }) => Promise<unknown>
   }
   mail: {
-    list: (opts?: { limit?: number; unreadOnly?: boolean; letterType?: 'daily' | 'weekly'; cursorBefore?: number }) => Promise<LetterListItem[]>
+    list: (opts?: { limit?: number; offset?: number; unreadOnly?: boolean; letterType?: 'daily' | 'weekly'; cursorBefore?: number }) => Promise<LetterListItem[]>
     get: (id: string) => Promise<LetterDetail>
     getUnreadCount: () => Promise<number>
     getLatestUnread: () => Promise<{ id: string; subject: string; letterType: string; createdAt: number } | null>

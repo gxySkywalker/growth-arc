@@ -42,7 +42,7 @@ export function LetterViewer({ letter, isRead, sealJustBroke, viewMode = 'openin
         <div className="mail-fact-slip">
           <div className="mail-fact-slip-header">今日星页</div>
           <div className="mail-fact-slip-grid">
-            {letter.factSummary.focusMinutes !== undefined && letter.factSummary.focusMinutes > 0 && <span>专注 {letter.factSummary.focusMinutes} 分</span>}
+            {letter.factSummary.focusMinutes !== undefined && letter.factSummary.focusMinutes > 0 && <span>这段来路 {letter.factSummary.focusMinutes} 分</span>}
             {letter.factSummary.waypointCount !== undefined && letter.factSummary.waypointCount > 0 && <span>路标 {letter.factSummary.waypointCount} 个</span>}
             {letter.factSummary.primaryDirection && <span>{letter.factSummary.primaryDirection}</span>}
           </div>

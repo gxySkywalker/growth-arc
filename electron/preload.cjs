@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('growthArc', {
   companions: {
     get: () => invoke('companions:get'),
     setActive: (id) => invoke('companions:set-active', id),
+    rename: (id, nickname) => invoke('companions:rename', { id, nickname }),
+    getPendingGrowth: () => invoke('companions:get-pending-growth'),
+    markGrowthSeen: (id) => invoke('companions:mark-growth-seen', id),
     evolve: (id, pathId) => invoke('companions:evolve', { id, pathId }),
   },
   history: (limit) => invoke('history:get', limit),

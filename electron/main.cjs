@@ -3,6 +3,7 @@ const path = require('node:path')
 const fs = require('node:fs')
 const { ProxyAgent } = require('undici')
 const { StudyDatabase } = require('./database.cjs')
+const { generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody } = require('./angel-ai.cjs')
 
 let mainWindow
 let tray
@@ -51,7 +52,30 @@ function createWindow() {
   })
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   else mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  if (process.env.GROWTH_ARC_DEBUG_RENDERER === '1') {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      console.error(`[renderer:${level}] ${sourceId}:${line} ${message}`)
+    })
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      console.error(`[renderer-gone] ${details.reason} (${details.exitCode})`)
+    })
+    mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
+      console.error(`[renderer-load-failed] ${code} ${description} ${url}`)
+    })
+  }
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  if (process.env.GROWTH_ARC_DEBUG_CAPTURE) {
+    mainWindow.once('ready-to-show', () => {
+      setTimeout(async () => {
+        try {
+          const image = await mainWindow.webContents.capturePage()
+          fs.writeFileSync(process.env.GROWTH_ARC_DEBUG_CAPTURE, image.toPNG())
+        } catch (error) {
+          console.error('[renderer-capture-failed]', error?.message || error)
+        }
+      }, 3000)
+    })
+  }
   mainWindow.on('close', (event) => {
     if (!allowQuit) {
       event.preventDefault()
@@ -102,52 +126,12 @@ const ANGEL_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'angel-lett
 const ANGEL_PROMPT_VERSION = 1
 
 async function generateLetterNarrative(letter) {
-  const apiKey = readApiKey()
-  if (!apiKey) return { success: false, status: 'template' }
-
-  const settings = database.getSettings()
-  const provider = settings.api_provider || 'openai'
-  const model = settings.model || 'gpt-5.6-luna'
-  // Support custom base_url for OpenAI-compatible providers
-  const baseUrl = settings.ai_base_url || (
-    provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
-  )
-
-  const fact = typeof letter.fact === 'string' ? JSON.parse(letter.fact) : letter.fact
-  const factPrompt = JSON.stringify({ letterType: letter.letter_type, fact }, null, 0)
-
-  const systemPrompt = ANGEL_PROMPT + '\n\n## 当前信件事实\n' + factPrompt
-  const userMsg = '请根据当前事实，以小天使的口吻写一封短信。'
-
-  const body = {
-    model,
-    max_tokens: 600,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMsg },
-    ],
-  }
-
-  try {
-    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    })
-    const json = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      const errMsg = json?.error?.message || `HTTP ${response.status}`
-      if (response.status === 429) return { success: false, status: 'quota_exceeded' }
-      return { success: false, status: 'failed', error: errMsg }
-    }
-    const text = json.choices?.[0]?.message?.content?.trim()
-    if (!text) return { success: false, status: 'failed', error: 'empty response' }
-    return { success: true, status: 'success', text, provider, model }
-  } catch (e) {
-    return { success: false, status: 'failed', error: e.message }
-  }
+  return generateAngelNarrative({
+    letter,
+    apiKey: readApiKey(),
+    settings: database.getSettings(),
+    prompt: ANGEL_PROMPT,
+  })
 }
 
 async function ensureAiNarratives() {
@@ -157,20 +141,30 @@ async function ensureAiNarratives() {
 
   // Only process NEW letters (pending), not historical template letters.
   // Failed letters with retries remaining are also retried.
+  if (!readApiKey()) {
+    database.run("UPDATE letters SET ai_status = 'skipped' WHERE ai_status = 'pending'")
+    return
+  }
+
   const pending = database.all(
     `SELECT * FROM letters WHERE template_body IS NOT NULL AND template_body != ''
-     AND (ai_status = 'pending'
+     AND letter_type IN ('daily', 'weekly')
+     AND (ai_status IN ('pending', 'skipped')
        OR (ai_status = 'failed' AND COALESCE(ai_retry_count,0) < ?))
      ORDER BY created_at DESC LIMIT 10`, [MAX_RETRIES]
   )
   for (const letter of pending) {
     if (Date.now() > deadline) break // global timeout
+    if (!isAngelNarrativeEligible(letter)) continue
     const result = await generateLetterNarrative(letter)
     if (result.success) {
+      const useAiBody = shouldUseAiBody(letter) ? 1 : 0
       database.run(
-        "UPDATE letters SET ai_body = ?, body_source = 'ai', ai_status = 'success', ai_provider = ?, ai_model = ?, ai_prompt_version = ?, ai_retry_count = 0 WHERE id = ?",
-        [result.text, result.provider, result.model, ANGEL_PROMPT_VERSION, letter.id]
+        "UPDATE letters SET ai_body = ?, body_source = CASE WHEN ? = 1 AND is_read = 0 AND body_source = 'template' THEN 'ai' ELSE body_source END, ai_status = 'success', ai_provider = ?, ai_model = ?, ai_prompt_version = ?, ai_retry_count = 0 WHERE id = ?",
+        [result.text, useAiBody, result.provider, result.model, ANGEL_PROMPT_VERSION, letter.id]
       )
+    } else if (result.status === 'skipped') {
+      database.run("UPDATE letters SET ai_status = 'skipped' WHERE id = ?", [letter.id])
     } else {
       const newRetry = (letter.ai_retry_count || 0) + 1
       const finalStatus = newRetry >= MAX_RETRIES ? 'failed' : result.status
@@ -198,7 +192,7 @@ async function generateTestLetter() {
   }
   const systemPrompt = ANGEL_PROMPT + '\n\n## 测试信笺\n' + JSON.stringify(testFact)
 
-  const baseUrl = settings.ai_base_url || (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1')
+  const baseUrl = settings.ai_base_url || settings.proxy_url || (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1')
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
@@ -346,17 +340,32 @@ function registerHandlers() {
   handle('session:resume', (id) => database.resumeSession(id))
   handle('session:stop', ({ id, data }) => database.stopSession(id, data))
   handle('session:cancel', (id) => database.cancelSession(id))
-  handle('companions:get', () => database.getCompanionCollection())
-  handle('companions:set-active', (id) => database.setActiveCompanion(id))
-  handle('companions:evolve', ({ id, pathId }) => database.evolveCompanion(id, pathId))
+    handle('companions:get', () => database.getCompanionCollection())
+    handle('companions:set-active', (id) => database.setActiveCompanion(id))
+    handle('companions:rename', ({ id, nickname }) => database.renameCompanion(id, nickname))
+    handle('companions:get-pending-growth', () => database.getPendingGrowthEvent())
+    handle('companions:mark-growth-seen', (id) => database.markGrowthEventSeen(id))
+    handle('companions:evolve', ({ id, pathId }) => database.evolveCompanion(id, pathId))
   handle('history:get', (limit) => database.getHistory(limit))
   handle('review:daily', (date) => database.getDailyReview(date))
   handle('review:save-daily', (data) => database.saveDailyReview(data))
   handle('review:weekly', (date) => database.getWeeklyReport(date))
   handle('settings:get', () => ({ ...database.getSettings(), hasApiKey: Boolean(readApiKey()) }))
-  handle('settings:set', (data) => database.setSettings(data))
+  handle('settings:set', (data) => {
+    const result = database.setSettings(data)
+    if (data && ['api_provider', 'model', 'ai_base_url', 'proxy_url'].some((key) => Object.hasOwn(data, key))) {
+      database.run("UPDATE letters SET ai_status = 'pending', ai_retry_count = 0 WHERE ai_status IN ('skipped', 'failed', 'quota_exceeded')")
+      ensureAiNarratives().catch(() => {})
+    }
+    return result
+  })
   handle('settings:has-api-key', () => Boolean(readApiKey()))
-  handle('settings:set-api-key', (key) => { saveApiKey(key); return true })
+  handle('settings:set-api-key', (key) => {
+    saveApiKey(key)
+    database.run("UPDATE letters SET ai_status = 'pending', ai_retry_count = 0 WHERE ai_status IN ('skipped', 'failed', 'quota_exceeded')")
+    ensureAiNarratives().catch(() => {})
+    return true
+  })
   handle('settings:clear-api-key', () => { clearApiKey(); return true })
   handle('settings:open-data-folder', async () => shell.openPath(database.openDataPath()))
   handle('ai:generate', ({ type, date }) => generateAiReport(type, date))
