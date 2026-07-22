@@ -1,195 +1,235 @@
-# 成长轨迹 (Growth Arc) — 项目交接文档 v0.3.0
+# 成长轨迹 (Growth Arc) — 项目交接文档 v0.4.0
 
-> 日期：2026-07-21
-
----
-
-## 1. 项目概况
-
-**项目名称**：成长轨迹 (Growth Arc)  
-**技术栈**：Electron + React 19 + TypeScript + Vite + sql.js (WASM SQLite)  
-**当前版本**：v0.3.0 — 灯火与星轨：邮局与天文台  
-**定位**：本地优先、单用户的游戏化学习系统。用户在日常学习的同时与一个温暖的中世纪边境世界共同生活。每次真实专注都会让世界永久向前生长。
-
-**核心循环**：开始远征 → 专注计时 → 返程结算 → 获得奖励 → 查看天文台与编年史 → 天使邮局收信。
+> 日期：2026-07-22
+> 状态：邮件模块已冻结，进入 NPC/伙伴系统开发阶段
 
 ---
 
-## 2. 当前已完成系统
+## 1. 项目简介
 
-### 2.1 炉火小屋 (Cottage)
+| 项目 | 值 |
+|------|-----|
+| **项目名称** | 成长轨迹 (Growth Arc) |
+| **当前版本** | v0.4.0 — 小天使与旅途记忆：写给旅人的信 |
+| **技术栈** | Electron + React 19 + TypeScript + Vite + sql.js (WASM SQLite) |
+| **定位** | 本地优先、单用户的像素RPG生活记录软件。玩家在学习的同时与一个温暖的中世纪边境世界共同生活。 |
+| **核心体验** | 每次远征后，住在邮局二楼的小天使会整理当天的旅途，写下一封温暖的信。 |
 
-- WASD/方向键走动，主角 32×48 px sprite
-- 碰撞检测、脚点系统、场景交互（壁炉/书桌/宝箱/门）
-- 常伴伙伴动态渲染 + 交谈
-- 位置：`src/pages/CottagePage.tsx`、`src/components/CottageScene.tsx`、`src/components/SceneCompanion.tsx`
-- 美术：`assets/art/environments/cottage/`（木地板、素墙、木梁、内墙角、门口）
-
-### 2.2 远征系统 (Expedition)
-
-- 开始远征 → 专注计时（可暂停/恢复/heartbeat 30s）→ 返程清点 → 远征归来结算
-- 多路标结算：主要路标 + 沿途路标（`session_task_links` 表）
-- 沿途经验递减（10→8→6→4→2），单场上限 30 XP
-- 5 分钟有效专注门槛；不足 5 分钟保留记录不追加经验
-- 远征归来弹窗：普通结算紧凑一屏，特殊结果才滚动
-- 空手返回确认：应用内像素弹窗（非浏览器 confirm）
-- 远征类型：brief (0-59s) / short (60-299s) / expedition (300-1799s) / deep (≥1800s)
-- reason 持久化：`session_task_links.reason` 列（awarded/short_session/already_awarded/xp_cap_reached）
-- 位置：`src/components/FocusController.tsx`、`electron/database.cjs`、`electron/game.cjs`
-
-### 2.3 天使邮局 (Post Office)
-
-- 独立页面，侧栏入口「天使邮局」
-- 三层结构：地点头部 → 木格信匣（左 270px）→ 展开信纸（右）
-- 信件类型：daily/weekly/festival/memorial/world
-- 已读/未读状态（蜡封完整/破裂 + 信封打开/闭合）
-- 交互模式：note（笔记）/ memory（纪念）/ reply（回信）/ none
-- 信封使用真实 PNG 资源（`assets/art/mail/`）：mail_unread/mail_read/mail_reply/mail_special
-- Hover 摇摆动画（±2.5deg, 600ms），点击打开动画（450ms）
-- 状态持久化：sessionStorage（prototype-only，接入正式 IPC 后删除）
-- 新到来信快照机制（阅读后不立即移除，离开分类后刷新）
-- 位置：`src/pages/PostOfficePage.tsx`、`src/lib/mailMock.ts`、`src/world.css`
-
-### 2.4 天文台 (Observatory)
-
-- 独立页面，侧栏入口「天文台」
-- 日/周双视图切换
-- 日视图：Hero 总时长 + 今日足迹时间线 + 旅途方向 + 24 小时星图 + 观测册
-- 周视图：Hero 周总时长 + 趋势文案 + 7×24 星轨热力图 + 七日总量柱图 + 旅途方向 + 本周足迹
-- ECharts 渲染三张图表（按需引入，Canvas renderer）
-- 星象札记：纯函数根据数据生成客观观察文案
-- 观测册：可选的每日观测札记（win/energy/blocker/futureNote）
-- 历史日期导航（前后箭头 + 回到今天/本周）
-- 位置：`src/pages/ObservatoryPage.tsx`、`src/lib/observatory.ts`、`src/lib/observatoryCharts.ts`、`src/lib/observatoryInsights.ts`、`src/components/ObsChart.tsx`
-
-### 2.5 制图室 (PlanPage)
-
-- 三级结构：旅途方向 → 路线阶段 → 路标
-- 拖拽排序、12 色拾色器、右键菜单
-- 领域/目标/任务 CRUD（编辑/归档/删除/恢复）
-- "学习领域"→"旅途方向"（v0.2 统一）
-
-### 2.6 信件系统基础设施
-
-- `letters` 表 + CRUD + 已读/未读 + 回信
-- `ensurePeriodicLetters` 补发框架
-- 本地模板引擎（`src/lib/domain.cjs`）
-- `mail:*` IPC 8 个 handler
-- 位置：`electron/database.cjs`、`electron/domain.cjs`、`electron/main.cjs`
-
-### 2.7 其他系统
-
-- 旅途编年史（HistoryPage）：按日期分组、展开档案、掉落展示、沿途原因
-- 伙伴营地（GrowthPage）：图鉴、羁绊、进化
-- 天使来信/复盘（ReviewPage）：旧页面，已废弃，路由映射到 ObservatoryPage
-- 旅程总览（HomePage）：今日快照、经验条、背包
-- 侧栏导航：炉火小屋 · 旅程总览 · 制图室 · 伙伴营地 · 旅途编年史 · 天文台 · 天使邮局 · 设置
+**核心循环**：开始远征 → 专注计时 → 返程结算 → 第二天打开App → 收到小天使的信
 
 ---
 
-## 3. 最近版本：v0.3.0
+## 2. 当前版本状态
 
-**35 个文件变动，+5107/-29 行。** 主要新增：
-
-| 分类 | 新增文件 |
-|------|---------|
-| 邮局页面 | `src/pages/PostOfficePage.tsx`、`src/lib/mailMock.ts` |
-| 天文台页面 | `src/pages/ObservatoryPage.tsx`、`src/lib/observatory.ts`、`src/lib/observatoryCharts.ts`、`src/lib/observatoryInsights.ts` |
-| ECharts | `src/components/ObsChart.tsx`（React 封装，含 lifecycle/resize/reduced-motion） |
-| 信封资产 | `assets/art/mail/mail_unread.png`、`mail_read.png`、`mail_reply.png`、`mail_special.png` |
-| 设计文档 | `docs/ANGEL_POST_OFFICE_PROPOSAL.md`、`docs/ANGEL_POST_OFFICE_VISUAL_BLUEPRINT.md`、`docs/ANGEL_POST_OFFICE_STATIC_PROTOTYPE.md`、`docs/ANGEL_POST_OFFICE_ASSET_PROMPTS.md`、`docs/TIME_AND_MAIL_SYSTEM.md` |
-| 后端扩展 | `electron/domain.cjs`（+period tools, templates, facts builders, hourly computation） |
+| 项目 | 值 |
+|------|-----|
+| Git 分支 | `master` |
+| 最新 commit | `588e8e1` |
+| 最新 Release | `v0.4.0` on GitHub |
+| 已完成模块 | 天使邮局（完整生命周期）、小天使叙事系统、AI信件系统、键盘导航系统、世界状态系统 |
 
 ---
 
-## 4. 当前代码架构
+## 3. 技术架构
 
 ```
-src/
-  pages/          页面组件（CottagePage, HomePage, PlanPage, HistoryPage, ReviewPage, GrowthPage, SettingsPage, ObservatoryPage, PostOfficePage）
-  components/     通用组件（FocusController, Modal, Icon, PixelCompanion, ObsChart, ItemTooltip, AiReportCard, CottageScene, SceneCompanion）
-  lib/            前端纯函数（format, observatory, observatoryCharts, observatoryInsights, mailMock, audio, item-lore）
-  context/        React Context（AppContext）
-  *.css           样式（styles.css, focus.css, world.css, pixel-ui.css, plan-world.css, cottage-scene.css）
+项目目录:
+  src/                React 前端 (Vite + TypeScript)
+    pages/            页面组件
+    components/       通用组件 (FocusController, LetterViewer, Icon, ...)
+    lib/              纯函数 (audio, navState, inputContext, mailMock, observatory, ...)
+    context/          React Context (AppContext)
+    hooks/            (已删除，useRosterNav 废弃)
+    *.css             样式文件
+  electron/           Electron 主进程 (CommonJS)
+    main.cjs          主进程入口，IPC handler 注册，AI 调用
+    preload.cjs       contextBridge → window.growthArc
+    database.cjs      sql.js 数据库 (CRUD, migration, seed, mail lifecycle)
+    domain.cjs        纯函数 (XP, dates, letter templates, world state, festivals)
+    game.cjs          游戏系统 (expedition roll, companions, loot)
+    prompts/          AI prompt 资源文件
+  public/             静态资源 (音频、字体)
+  assets/             美术资源 (像素图、参考图)
+  docs/               设计文档
+  scripts/            开发脚本 (test-mail-lifecycle, test-ai-narrative)
 
-electron/
-  main.cjs        Electron 主进程，IPC handler 注册
-  preload.cjs     contextBridge API
-  database.cjs    sql.js 数据库（CRUD, migration, letters, mail）
-  domain.cjs      纯函数（XP, dates, letters, stats, hourly computation）
-  game.cjs        游戏系统（expedition roll, companions, loot）
-
-assets/
-  art/            像素美术资源（characters, environments, mail, drafts, prompts, reference, specs）
-  audio/          音频文件（bgm: cottage.mp3, expedition.mp3）
-  fonts/          像素字体（Fusion Pixel SC）
+关键约束:
+  - 无 router: 页面切换为 useState<PageId>
+  - CommonJS (electron/) + ESM (src/)
+  - sql.js WASM 需 asarUnpack
+  - API Key 使用 Windows DPAPI 加密存储 (secret.bin)，不进 SQLite
+  - 数据库 migration 使用 schema_version 版本控制 + PRAGMA table_info
+  - 像素字体: Fusion Pixel SC
+  - 图表配色: 星光蓝 #8FBCCC + 黄铜 #C39755
 ```
 
-**关键约束**：
-- 无 router：页面切换为 `useState<PageId>` in AppShell
-- CommonJS in Electron，ESM in Vite
-- sql.js WASM 运行时需 `asarUnpack`
-- API Key 使用 Windows DPAPI 加密存储
-- 数据库 migration 使用 `PRAGMA table_info` 检测列存在性（无版本号）
-- 所有 chart memo 仅依赖数据对象 `[daily]`/`[weekly]`，不依赖 cursor
-- ObsChart 使用 `key={cursor}` 强制 remount 避免 ECharts 状态残留
-
 ---
 
-## 5. 最近修复的问题
+## 4. 核心业务设计
 
-| 问题 | 状态 | 可能遗留风险 |
-|------|:---:|------|
-| 天文台日期切换后图表空白 | ✅ 已修复（memo 改为纯数据依赖 + chart key） | 极端快速连续切换未充分测试 |
-| 信封 CSS 绘制的蜡封不可辨识 | ✅ 已修复（替换为真实 PNG） | 节庆信封 assets 尚未生成 |
-| 邮局数据分类不一致（新到信 category='new'） | ✅ 已修复（改为 'daily'/'weekly'，'new' 仅为视图过滤） | — |
-| 时区导致小时分布数据异常 | ✅ 已修复（cursor 裁剪到 period 边界） | — |
-| goToday 后图表空白 | ✅ 已修复（async 竞态保护 + chart key） | — |
-| ECharts 生命周期旧数据残留 | ✅ 已修复（key remount） | — |
+### 4.1 天使邮局 — 邮件生命周期
 
----
-
-## 6. 当前不要修改的部分
-
-- **数据库 schema**：letters 表、session_task_links、focus_sessions 等均已稳定
-- **IPC 管线**：mail:* 和 observatory:* handler 已就绪
-- **信件生成**：ensurePeriodicLetters、ensureLetterForPeriod 已稳定
-- **天文台统计口径**：completed-only、sessionCounts、hourly computation
-- **Sidebar/导航**：8 项导航结构已确定（天文台 + 邮局均为独立入口）
-- **像素字体**：Fusion Pixel SC 已集成，不要更换
-- **图表配色**：星光蓝 #8FBCCC + 黄铜 #C39755 + 深蓝灰背景 #283342
-
----
-
-## 7. 下一阶段开发建议
-
-### P0（阻塞）
-- 生成 Asset Pack 01 PNG（邮局基础环境、信封、小天使）替换 CSS 占位
-- 将邮局静态原型接入正式 mail:* IPC（替换 mock 数据）
-
-### P1（重要）
-- 实现归灯节四阶段节庆系统（纯函数 + 日期规则 + phase overlay）
-- 实现春节日期表（2026-2040 公历离线表）
-- 小天使 CSS sprite 动画（idle/sorting/stamping 三态）
-- 邮局 header 真实背景替换
-
-### P2（后续）
-- AI 信件润色（需用户授权，默认关闭）
-- 月度/年度信 UI
-- 居民信件系统（依赖 NPC 系统）
-- 礼物附件系统
-- Canvas/Pixi 场景动画评估
-
----
-
-## 8. 新 Claude Code 会话启动提示
+**所有邮件由 App 启动时自动生成，不依赖 UI 触发。**
 
 ```
-加载项目成长轨迹 (Growth Arc)。Electron + React 19 + Vite + sql.js，当前 v0.3.0。
-运行: npm run dev (开发), npm test (125+ tests), npm run build (构建)。
-请阅读 CLAUDE.md 和 docs/ 下的设计文档。
-当前正在开发天使邮局与天文台。邮局页面为静态原型（mock 数据 + sessionStorage），
-天文台图表使用 ECharts 按需引入。信封使用 assets/art/mail/ 下真实 PNG。
-不要修改数据库 schema、IPC 管线、导航结构、像素字体和图表配色方案。
-修改前请先运行 npm test 和 npm run build 确认基线通过。
+App 启动
+  ├─ database.init() → migration → seed
+  ├─ ensureWelcomeLetter()         welcome:first_visit (幂等)
+  ├─ ensurePeriodicLetters(now)    daily + weekly 扫描
+  ├─ ensureEventLetters(now)       归灯节节点检查
+  ├─ ensureBirthdayLetter(now)     生日检查
+  └─ ensureAiNarratives()          AI叙事 (后台异步, 不阻塞窗口)
+```
+
+**PostOfficePage 只读取数据 (mail:list → mail:get)，不触发生成。**
+
+#### Daily (每日星笺)
+- 触发: App 启动时扫描 lastDaily+1 至 yesterday
+- 条件: shouldGenerateDailyLetter — 有效远征 (short/expedition/deep) 或有复盘记录
+- 空白日不生成，离线回来自动补发
+- 幂等: UNIQUE(letter_type, period_key)
+- 标题: "7月20日的星页"
+- 正文: 小天使人格叙事模板 (无数据报告语言)
+
+#### Weekly (旅途札记)
+- 周期: 周一 00:00 ~ 周日 23:59
+- 条件: 完整周结束 + 该周有有效远征
+- 标题: "旅途札记" (列表) / "7月13日—7月20日的旅途札记" (详情)
+- 寄出日期: periodEnd (下周一)
+
+#### Festival (归灯节)
+- 日期: 每年 11/7-11/16
+- 节点: Day1 opening (灯火初燃) / Day5 midway (旧灯回响) / Day10 climax (归灯夜)
+- 过滤: playerStartYear ≥ firstYear，不生成玩家进入世界之前的节庆
+- 幂等: letter_events.event_key UNIQUE
+
+#### Birthday (生日信)
+- 条件: birthday_date ≥ world_entered_at AND birthday_date ≤ now
+- event_key: birthday:{year}，每年一封
+- 迟到送达: 生日当天未登录，之后首次启动补发 (同年内)
+
+#### Welcome Letter (欢迎信)
+- 触发: 首次启动时生成 (welcome:first_visit)
+- 发件人: 小天使
+- 日期: world_entered_at (玩家进入世界当天)
+- 分类: 纪念来信
+
+### 4.2 小天使叙事系统
+
+**小天使人格**：住在邮局二楼朝西的小房间，窗台上有一盆莉娅送的花。每天傍晚整理信件、盖邮戳、封蜡。邮袋有点大，拖在地上的时候比背起来多。灯油是奥伦每月分给她的。
+
+**世界状态系统** (`getWorldState(periodKey)`)：纯函数，根据日期确定性计算世界状态。窗框会响→艾达来修→修好；花会发芽→开花→凋谢；归灯节期间镇上挂灯。未来可扩展 NPC、地点、事件。
+
+**模板信**：无 AI Key 时使用。60-100字叙事风格，不提数据统计。季节感知 (春夏秋冬)，天气变化，小天使动作细节 (盖邮戳、拖邮袋、整理木格)。
+
+**AI 信**：有 Key 时使用。同一套小天使人格 prompt，用真实 API 生成。失败自动降级为模板信。
+
+---
+
+## 5. AI 系统
+
+```
+用户填写钥匙 → safeStorage.encryptString → secret.bin
+App 启动 → readApiKey() → safeStorage.decryptString
+  → ensureAiNarratives() (后台异步)
+    → generateLetterNarrative(letter)
+      → fetch API (OpenAI/DeepSeek 兼容接口)
+      → 成功: body_source='ai', ai_status='success'
+      → 失败: ai_status='failed', retry++, 3次后放弃
+      → 无Key: 跳过，使用模板信
+```
+
+**状态机**: pending → success/failed/template/skipped/quota_exceeded
+**失败策略**: 最多重试3次，每次启动重试，不阻塞窗口创建
+**默认**: 无 Key 时完全不调用 AI，模板信正常工作
+
+---
+
+## 6. 数据库设计
+
+### letters
+| 字段 | 说明 |
+|------|------|
+| letter_type | daily/weekly/festival/memorial/world |
+| period_key | 周期标识 (UNIQUE with letter_type) |
+| fact_json | 事实层 (不可变，schemaVersion=2) |
+| template_body | 模板正文 (始终存在) |
+| ai_body | AI 正文 (可选) |
+| body_source | 'template' / 'ai' |
+| ai_status | pending/success/failed/template/skipped/quota_exceeded |
+| ai_retry_count | 重试次数 |
+
+### letter_events
+| 字段 | 说明 |
+|------|------|
+| event_key | UNIQUE, 如 returning_lights:2026:opening |
+| letter_id | FK → letters(id) ON DELETE SET NULL |
+
+### settings (邮件相关)
+- `world_entered_at_ms` — 玩家进入世界时间
+- `schema_version` — 迁移版本号 (当前 V3)
+- `last_daily_period_checked` / `last_weekly_period_checked` — 扫描游标
+- `birthday_month` / `birthday_day` / `birthday_updated_at` — 生日设置
+
+---
+
+## 7. 已完成版本决策 (不可重新讨论)
+
+以下设计已经过反复迭代确认，**不要重新设计**:
+
+1. 邮件由 App 启动时自动生成，不是 UI 触发生成
+2. AI 失败不能影响游戏正常运行 (降级模板信)
+3. 模板信必须保持世界观 (不提数据统计、不用现代词汇)
+4. 技术词不能进入游戏文本 (API、token、模型等词禁止)
+5. 空分类永远显示，不根据内容隐藏 (邮局分类是固定格子)
+6. 小天使是叙事角色，不是系统通知 (第一人称，手写信风格)
+7. 世界状态是纯函数 (不依赖数据库，确定性)
+8. AI Key 使用 DPAPI 加密存储，不进入 SQLite
+9. 邮件模块已冻结，修改需要明确原因记录在 `docs/mail-system-v0.7.md`
+
+---
+
+## 8. 当前待办 (未来模块)
+
+- **NPC 系统**: 友人来信分类 (letter_type='world')，居民关系，商队事件
+- **成就系统**: 纪念来信扩展
+- **年度回顾信**: fact_json memory 字段已预留
+- **更多节庆**: FESTIVALS 配置扩展 (春节、冬星节等)
+- **小天使 CSS sprite**: 美术资产
+- **邮局 header 背景**: 美术资产
+- **月光/节日信封 PNG**: 美术资产
+
+---
+
+## 9. 开发规范
+
+### 修改前
+1. 阅读 `CLAUDE.md` 和本文件
+2. 运行 `npm test` 确认基线通过 (188 tests)
+3. 理解当前架构后再动手
+
+### 代码风格
+- 保持世界观语言 (游戏文本不使用技术词)
+- 不随意重构 (优先增量修改)
+- 优先用户体验而非技术实现
+- 新功能必须有自动化测试
+
+### 发布前
+```bash
+npx tsc --noEmit   # TypeScript 检查
+npm test           # 188 tests
+npm run build      # 生产构建
+```
+
+### 新会话启动提示
+
+```
+加载项目成长轨迹 (Growth Arc)。Electron + React 19 + Vite + sql.js，当前 v0.4.0。
+运行: npm run dev, npm test (188 tests), npm run build。
+请阅读 CLAUDE.md 和 docs/PROJECT_HANDOFF.md。
+邮件模块 (天使邮局) 已冻结，详见 docs/mail-system-v0.7.md。
+当前可开发: NPC系统、成就系统、伙伴扩展、美术资产、年度回顾信。
+不要修改邮件生成逻辑、AI调用链、世界状态系统。
+保持世界观语言，禁止技术词进入游戏文本。
+修改前先运行 npm test 确认基线。
 ```
