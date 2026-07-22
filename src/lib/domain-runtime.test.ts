@@ -176,12 +176,10 @@ describe('subject generation', () => {
     }
   })
 
-  it('weekly subject includes date range', () => {
+  it('weekly subject is concise', () => {
     const f = baseFacts({ periodStart: new Date(2026, 6, 14).getTime() })
     const s = generateLocalLetterSubject('weekly', f, 'a')
-    expect(s).toContain('7月14日')
-    expect(s).toContain('7月20日')
-    expect(s).toContain('旅途札记')
+    expect(s).toBe('旅途札记')
   })
 
   it('weekly full title is date range', () => {

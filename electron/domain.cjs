@@ -178,12 +178,12 @@ function formatMd(ts) {
 }
 
 function generateLocalLetterSubject(type, facts, seedInput) {
+  const periodStart = facts.periodStart || facts.period?.periodStart || Date.now()
   if (type === 'daily') {
-    return `${formatMd(facts.periodStart)}的星页`
+    return `${formatMd(periodStart)}的星页`
   }
-  // Weekly short: "7月13日—7月19日 · 旅途札记"
-  const weekEnd = facts.periodStart + 6 * 86400000
-  return `${formatMd(facts.periodStart)}—${formatMd(weekEnd)} · 旅途札记`
+  // Weekly short: "旅途札记" (date range shown in subtitle)
+  return '旅途札记'
 }
 
 function generateWeeklyFullTitle(periodStart) {
@@ -435,12 +435,15 @@ const DAILY_POOL = [
   '邮局今天来了几个远方的人，但他们要找的不是这里。我继续整理你的信札。',
 ]
 
+// Backward-compat: facts may be v1 (flat) or v2 (nested under .stats)
+function f(facts, key) { return facts.stats?.[key] ?? facts[key] }
+
 function generateDailyTemplate(facts, seedInput) {
   const seed = hashSeed(seedInput)
-  const hasSession = facts.totalActiveSeconds > 0
-  const season = seasonForDate(new Date(facts.periodStart || Date.now()))
+  const hasSession = (f(facts, 'totalActiveSeconds') || 0) > 0
+  const season = seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
 
-  if (!hasSession && facts.hasWrittenReview) {
+  if (!hasSession && f(facts, 'hasWrittenReview')) {
     return '天文台留下了一句话。今天有一段记录被收好。'
   }
   if (!hasSession) {
@@ -493,9 +496,11 @@ const WEEKLY_CLOSINGS = [
 
 function generateWeeklyTemplate(facts, seedInput) {
   const seed = hashSeed(seedInput)
-  const hasPrevWeek = (facts.previousPeriodTotalSeconds || 0) > 0
-  const diff = facts.totalActiveSeconds - (facts.previousPeriodTotalSeconds || 0)
-  const season = seasonForDate(new Date(facts.periodStart || Date.now()))
+  const totalSec = f(facts, 'totalActiveSeconds') || 0
+  const prevSec = f(facts, 'previousPeriodTotalSeconds') || 0
+  const hasPrevWeek = prevSec > 0
+  const diff = totalSec - prevSec
+  const season = seasonForDate(new Date((facts.periodStart || facts.period?.periodStart || Date.now())))
   const parts = []
 
   parts.push(WEEKLY_OPENINGS[seed % WEEKLY_OPENINGS.length])

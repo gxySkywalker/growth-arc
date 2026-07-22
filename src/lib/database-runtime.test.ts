@@ -1447,10 +1447,9 @@ describe('mail lifecycle — weekly', () => {
 
     const letters = database.listLetters({ letterType: 'weekly' })
     expect(letters.length).toBeGreaterThanOrEqual(1)
-    // Title: "7月13日—7月19日 · 旅途札记"
+    // Title: "旅途札记" (date range in subtitle)
     const subj = letters[0].subject
-    expect(subj).toContain('旅途札记')
-    expect(subj).toContain('—')
+    expect(subj).toBe('旅途札记')
   })
 
   it('weekly idempotent on repeated calls', async () => {

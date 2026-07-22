@@ -7,19 +7,24 @@ import { playUISound } from '../lib/audio'
 
 // ── IPC-derived letter → UI-compatible MockLetter adapter ─────
 
-function senderForType(letterType: string): string {
+function senderForType(letterType: string, periodKey?: string): string {
   if (letterType === 'festival') return '小镇'
-  if (letterType === 'memorial') return '小镇'
+  if (letterType === 'memorial') {
+    // Welcome letter comes from 小天使 herself
+    if (periodKey && periodKey.startsWith('welcome:')) return '小天使'
+    return '小镇'
+  }
   return '小天使'
 }
 
 function dateLabelFromPeriod(letterType: string, periodStart: number, periodEnd?: number): string {
   const d = new Date(periodStart)
+  const year = d.getFullYear()
   if (letterType === 'weekly' && periodEnd) {
     const e = new Date(periodEnd - 86400000) // last day of the period
-    return `${d.getMonth() + 1}月${d.getDate()}日—${e.getMonth() + 1}月${e.getDate()}日`
+    return `${year}年${d.getMonth() + 1}月${d.getDate()}日—${e.getMonth() + 1}月${e.getDate()}日`
   }
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${year}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 function categoryFromType(letterType: string): MockCategory {
@@ -47,7 +52,7 @@ function ipcToLetter(item: LetterListItem, detail?: { body: string; factSummary:
     id: item.id,
     category: categoryFromType(item.letterType),
     subtype: item.letterType,
-    senderName: senderForType(item.letterType),
+    senderName: senderForType(item.letterType, item.periodKey),
     subject: item.subject,
     body: detail?.body ?? item.bodyPreview ?? '',
     dateLabel: dateLabelFromPeriod(item.letterType, item.periodStart, item.periodEnd),

@@ -1663,7 +1663,8 @@ class StudyDatabase {
     if (existing) return { created: false }
 
     const tz = tzInfo()
-    const now = Date.now()
+    // Use the player's actual world-entered date, not current time
+    const worldEntered = this.worldEnteredAtMs() || Date.now()
     const letterId = crypto.randomUUID()
     const templateBody = [
       '今天有人把一张新的旅途卡片放进了邮局的木格里。',
@@ -1688,8 +1689,8 @@ class StudyDatabase {
         id: letterId,
         letterType: 'memorial',
         periodKey: eventKey,
-        periodStart: now,
-        periodEnd: now + 86400000,
+        periodStart: worldEntered,
+        periodEnd: worldEntered + 86400000,
         timezoneOffsetMinutes: tz.timezoneOffsetMinutes,
         timezoneName: tz.timezoneName,
         subject: '你好呀，旅人',
@@ -1697,7 +1698,7 @@ class StudyDatabase {
         templateBody,
       })
       this.run("INSERT INTO letter_events (id, event_type, event_key, triggered_at, letter_id) VALUES (?,?,?,?,?)",
-        [crypto.randomUUID(), 'welcome', eventKey, now, letterId])
+        [crypto.randomUUID(), 'welcome', eventKey, worldEntered, letterId])
       return { created: true, letterId }
     } catch (e) {
       if (e.code === 'LETTER_PERIOD_EXISTS') return { created: false }
