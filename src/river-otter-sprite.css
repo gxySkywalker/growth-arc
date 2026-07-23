@@ -1,0 +1,9 @@
+.river-otter-sprite { position: relative; display: inline-block; flex: 0 0 auto; image-rendering: pixelated; }
+.river-otter-sprite-frame { display: block; width: 100%; height: 100%; background-repeat: no-repeat; background-size: 400% 400%; image-rendering: pixelated; }
+.river-otter-sprite-small { width: 48px; height: 48px; }
+.river-otter-sprite-medium { width: 72px; height: 72px; }
+.river-otter-sprite-large { width: 96px; height: 96px; }
+.river-otter-sprite-scene { width: 100%; height: 100%; }
+.river-otter-sprite-grown { transform: scale(1.28); transform-origin: center bottom; }
+.river-otter-sprite-final { transform: scale(1.55); transform-origin: center bottom; }
+.river-otter-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #dffffa; font-style: normal; font-size: 11px; }

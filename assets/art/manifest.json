@@ -120,6 +120,306 @@
       ]
     },
     {
+      "id": "hearth-hound-ember-tail-camp-portrait-v1",
+      "path": "characters/companions/hearth_hound_ember_tail_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "炭尾最终成长肖像；由 evolution_path=ember_tail 自动选择",
+        "保留炉火色、铜铃与深炭色尾尖，作为白日长成的视觉记录"
+      ]
+    },
+    {
+      "id": "hearth-hound-ember-tail-walk-32-v1",
+      "path": "characters/companions/hearth_hound_ember_tail_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "炭尾四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终形态尺寸渲染，并与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "hearth-hound-pine-shadow-camp-portrait-v1",
+      "path": "characters/companions/hearth_hound_pine_shadow_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "松影最终成长肖像；由 evolution_path=pine_shadow 自动选择",
+        "苔绿毛色与松针色脊毛属于傍晚长成的视觉记录"
+      ]
+    },
+    {
+      "id": "hearth-hound-pine-shadow-walk-32-v1",
+      "path": "characters/companions/hearth_hound_pine_shadow_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "松影四行四列：front、back、left、right；每行四帧",
+        "图集只经透明化、规则切格与 nearest-neighbor 缩放"
+      ]
+    },
+    {
+      "id": "hearth-hound-moon-paw-camp-portrait-v1",
+      "path": "characters/companions/hearth_hound_moon_paw_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "月爪最终成长肖像；由 evolution_path=moon_paw 自动选择",
+        "月灰毛色与暖色尾纹属于夜晚长成的视觉记录"
+      ]
+    },
+    {
+      "id": "hearth-hound-moon-paw-walk-32-v1",
+      "path": "characters/companions/hearth_hound_moon_paw_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "月爪四行四列：front、back、left、right；每行四帧",
+        "图集只经透明化、规则切格与 nearest-neighbor 缩放"
+      ]
+    },
+    {
+      "id": "moss-fox-stage-0-camp-portrait-v1",
+      "path": "characters/companions/moss_fox_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "枝绒营地肖像；默认个体称呼为苔芽",
+        "边缘连通的白灰背景已透明化，保留奶油白面颊与尾尖"
+      ]
+    },
+    {
+      "id": "moss-fox-stage-0-walk-32-v1",
+      "path": "characters/companions/moss_fox_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "枝绒四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放；用于小屋、营地与编年史图标"
+      ]
+    },
+    {
+      "id": "moss-fox-stage-1-camp-portrait-v1",
+      "path": "characters/companions/moss_fox_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "苔亚营地肖像；由 companion.stage=1 自动选择",
+        "运行时保持与枝绒相同基线，并以更大显示比例呈现"
+      ]
+    },
+    {
+      "id": "moss-fox-stage-1-walk-32-v1",
+      "path": "characters/companions/moss_fox_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "苔亚四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放"
+      ]
+    },
+    {
+      "id": "moss-fox-forest-crown-camp-portrait-v1",
+      "path": "characters/companions/moss_fox_forest_crown_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "森冠唯一最终成长肖像；由 evolution_path=forest_crown 自动选择",
+        "保留林冠层叠轮廓，不作为数值或战斗强化标记"
+      ]
+    },
+    {
+      "id": "moss-fox-forest-crown-walk-32-v1",
+      "path": "characters/companions/moss_fox_forest_crown_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "森冠四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "glimmer-cat-stage-0-camp-portrait-v1",
+      "path": "characters/companions/glimmer_cat_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "灯团营地肖像；尾端暖光为安静陪伴的视觉符号",
+        "边缘连通的白灰背景已透明化，保留猫身星纹和灯尾亮部"
+      ]
+    },
+    {
+      "id": "glimmer-cat-stage-0-walk-32-v1",
+      "path": "characters/companions/glimmer_cat_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "灯团四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放；用于小屋、营地与编年史图标"
+      ]
+    },
+    {
+      "id": "glimmer-cat-stage-1-camp-portrait-v1",
+      "path": "characters/companions/glimmer_cat_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "星烛营地肖像；由 companion.stage=1 自动选择",
+        "运行时保持与灯团相同脚底基线，并以更大显示比例呈现"
+      ]
+    },
+    {
+      "id": "glimmer-cat-stage-1-walk-32-v1",
+      "path": "characters/companions/glimmer_cat_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "星烛四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放"
+      ]
+    },
+    {
+      "id": "glimmer-cat-night-glass-camp-portrait-v1",
+      "path": "characters/companions/glimmer_cat_night_glass_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "夜璃唯一最终成长肖像；由 evolution_path=night_glass 自动选择",
+        "尾灯如稳定的琉璃微光，不作为数值或战斗强化标记"
+      ]
+    },
+    {
+      "id": "glimmer-cat-night-glass-walk-32-v1",
+      "path": "characters/companions/glimmer_cat_night_glass_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "夜璃四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "river-otter-stage-0-camp-portrait-v1",
+      "path": "characters/companions/river_otter_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "涟牙营地肖像；宽厚扁尾与河石腹纹为核心识别点",
+        "边缘连通的白灰背景已透明化，保留水纹与浅色腹部细节"
+      ]
+    },
+    {
+      "id": "river-otter-stage-0-walk-32-v1",
+      "path": "characters/companions/river_otter_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "涟牙四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放；用于小屋、营地与编年史图标"
+      ]
+    },
+    {
+      "id": "river-otter-stage-1-camp-portrait-v1",
+      "path": "characters/companions/river_otter_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "漪爪营地肖像；由 companion.stage=1 自动选择",
+        "运行时保持与涟牙相同脚底基线，并以更大显示比例呈现"
+      ]
+    },
+    {
+      "id": "river-otter-stage-1-walk-32-v1",
+      "path": "characters/companions/river_otter_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "漪爪四行四列：front、back、left、right；每行四帧",
+        "固定网格裁切、透明化与 nearest-neighbor 缩放"
+      ]
+    },
+    {
+      "id": "river-otter-bay-current-camp-portrait-v1",
+      "path": "characters/companions/river_otter_bay_current_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "湾澜唯一最终成长肖像；由 evolution_path=bay_current 自动选择",
+        "以更成熟稳定的水獭身姿表达共同停留过的河岸，不作为能力强化标记"
+      ]
+    },
+    {
+      "id": "river-otter-bay-current-walk-32-v1",
+      "path": "characters/companions/river_otter_bay_current_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "湾澜四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "iron-badger-stage-0-camp-portrait-v1",
+      "path": "characters/companions/iron_badger_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "小石獾营地肖像；低重心獾型轮廓、岩层背毛与宽厚前爪为识别点",
+        "边缘连通的白灰背景已透明化，保留白灰脸纹、爪缘与石层高光"
+      ]
+    },
+    {
+      "id": "iron-badger-stage-0-walk-32-v1",
+      "path": "characters/companions/iron_badger_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "小石獾四行四列：front、back、left、right；每行四帧",
+        "按统一内容裁切、共用基线与 nearest-neighbor 缩放生成；用于小屋、营地与编年史图标"
+      ]
+    },
+    {
+      "id": "iron-badger-stage-1-camp-portrait-v1",
+      "path": "characters/companions/iron_badger_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "岩甲獾营地肖像；由 companion.stage=1 自动选择",
+        "岩层背毛更加清晰，但不是装备、护甲或数值强化"
+      ]
+    },
+    {
+      "id": "iron-badger-stage-1-walk-32-v1",
+      "path": "characters/companions/iron_badger_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "岩甲獾四行四列：front、back、left、right；每行四帧",
+        "与小石獾共用脚底基线，并按成长阶段以略大比例显示"
+      ]
+    },
+    {
+      "id": "iron-badger-armor-king-camp-portrait-v1",
+      "path": "characters/companions/iron_badger_armor_king_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "铠獾王唯一最终成长肖像；由 evolution_path=armor_king 自动选择",
+        "“王”表示崎岖处安静可靠的存在感，不代表战斗首领或职业身份"
+      ]
+    },
+    {
+      "id": "iron-badger-armor-king-walk-32-v1",
+      "path": "characters/companions/iron_badger_armor_king_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "铠獾王四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
       "id": "player-walk-32x48-v1",
       "path": "characters/player/player_walk_32x48_v1.png",
       "role": "approved-runtime-sprite-atlas",

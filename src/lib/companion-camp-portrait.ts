@@ -12,7 +12,12 @@ const portraitPath = (speciesId: string, form: string) =>
 /** Optional camp portrait. Adding a future growth portrait with the same
  * filename convention makes it selectable without changing page code. */
 export function getCompanionCampPortrait(companion: Companion) {
-  const form = companion.evolution_path || `stage-${companion.stage}`
+  // An evolution route is meaningful only for the final chapter. Older saves
+  // can retain a route value early, but must never render a final-form portrait.
+  const stage = Number(companion.stage) || 0
+  const form = stage >= 2 && companion.evolution_path
+    ? companion.evolution_path
+    : `stage-${stage}`
   return portraits[portraitPath(companion.species_id, form)]
     || portraits[portraitPath(companion.species_id, 'stage-0')]
     || null

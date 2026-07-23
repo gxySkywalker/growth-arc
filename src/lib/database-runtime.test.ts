@@ -68,6 +68,7 @@ describe('companion identity', () => {
       stage: 1,
     })
     expect(result.expedition.growthEvent.companion.stageName).toBe('栗鬃')
+    expect(result.expedition.growthEvent.companion.nickname).toBe('栗鬃')
     const pending = database.getPendingGrowthEvent()
     expect(pending?.id).toBe(result.expedition.growthEvent.id)
     database.markGrowthEventSeen(pending.id)
@@ -88,6 +89,163 @@ describe('companion identity', () => {
     expect(result.growthEvent).toMatchObject({ companion_id: companion.id, previous_stage: 0, stage: 1 })
     expect(result.growthEvent.companion.stageName).toBe('栗鬃')
     expect(database.getPendingGrowthEvent()?.id).toBe(result.growthEvent.id)
+  })
+
+  it('keeps a traveller-given name while an unrenamed companion takes its grown form name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-growth-nickname-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const companion = database.getCompanionCollection().active
+    const now = Date.now()
+    database.renameCompanion(companion.id, '小栗')
+    database.run('UPDATE companions SET bond_xp = 99, stage = 0 WHERE id = ?', [companion.id])
+    database.run('INSERT INTO inventory (item_id, quantity, first_found_at, updated_at) VALUES (?, ?, ?, ?)', ['berry_bread', 1, now, now])
+
+    const result = database.useItem('berry_bread')
+    expect(result.growthEvent?.companion).toMatchObject({ nickname: '小栗', stageName: '栗鬃', nickname_is_custom: 1 })
+  })
+
+  it('migrates the former moss fox into 苔芽 and resolves its final growth without Chestnut time branches', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-moss-sprout-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run('UPDATE companions SET is_active = 0')
+    database.run(`INSERT INTO companions (id, species_id, nickname, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['moss-test', 'moss_fox', '狐狸', 190, 1, '', '', 1, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '4')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    const moss = reopened.getCompanion('moss-test')
+    expect(moss).toMatchObject({ nickname: '苔亚', stageName: '苔亚' })
+
+    reopened.run('INSERT INTO inventory (item_id, quantity, first_found_at, updated_at) VALUES (?, ?, ?, ?)', ['berry_bread', 1, now, now])
+    const result = reopened.useItem('berry_bread')
+    expect(result.growthEvent?.companion).toMatchObject({ stage: 2, stageName: '森冠', evolution_path: 'forest_crown' })
+
+    reopened.run("UPDATE companions SET evolution_path = 'grove_fox' WHERE id = ?", ['moss-test'])
+    reopened.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '4')")
+    reopened.save()
+    const migratedAgain = await new StudyDatabase(dir).init()
+    expect(migratedAgain.getCompanion('moss-test')).toMatchObject({ stageName: '森冠', evolution_path: 'forest_crown' })
+  })
+
+  it('migrates the former candle-shadow cat into the single night-light growth line', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-night-light-cat-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run(`INSERT INTO companions (id, species_id, nickname, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['cat-test', 'glimmer_cat', '猫', 200, 2, 'star_candle', '', 0, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '5')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    expect(reopened.getCompanion('cat-test')).toMatchObject({
+      nickname: '夜璃',
+      stageName: '夜璃',
+      evolution_path: 'night_glass',
+    })
+  })
+
+  it('migrates the former river otter into 涟牙 without replacing a chosen name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-river-otter-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run(`INSERT INTO companions (id, species_id, nickname, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['otter-test', 'river_otter', '水獭', 200, 2, 'river_guide', '', 0, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '6')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    expect(reopened.getCompanion('otter-test')).toMatchObject({
+      nickname: '湾澜',
+      stageName: '湾澜',
+      evolution_path: 'bay_current',
+    })
+    expect(reopened.getCompanion('otter-test').personalityProfile.habit).not.toBe('喜欢安静待在身边')
+  })
+
+  it('repairs a premature river final route and names an unrenamed middle form 漪爪', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-river-stage-repair-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run(`INSERT INTO companions (id, species_id, nickname, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['otter-stage-one', 'river_otter', '涟牙', 118, 1, 'bay_current', '', 0, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '7')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    expect(reopened.getCompanion('otter-stage-one')).toMatchObject({
+      nickname: '漪爪',
+      stage: 1,
+      stageName: '漪爪',
+      evolution_path: '',
+      nickname_is_custom: 0,
+    })
+  })
+
+  it('migrates the former iron badger without replacing a traveller-given name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-stone-iron-badger-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run(`INSERT INTO companions (id, species_id, nickname, nickname_is_custom, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['badger-default', 'iron_badger', '铁砧獾', 0, 118, 1, 'royal_smith', '', 0, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '8')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    expect(reopened.getCompanion('badger-default')).toMatchObject({
+      nickname: '岩甲獾', stage: 1, stageName: '岩甲獾', evolution_path: '', nickname_is_custom: 0,
+    })
+    expect(reopened.getCompanion('badger-default').personalityProfile.habit).not.toBe('喜欢安静待在身边')
+
+    const customDir = mkdtempSync(join(tmpdir(), 'growth-arc-stone-iron-badger-custom-'))
+    tempDirs.push(customDir)
+    const customDatabase = await new StudyDatabase(customDir).init()
+    customDatabase.run(`INSERT INTO companions (id, species_id, nickname, nickname_is_custom, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['badger-custom', 'iron_badger', '石头', 1, 200, 2, 'mountain_warden', '', 0, now])
+    customDatabase.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '8')")
+    customDatabase.save()
+
+    const reopenedCustom = await new StudyDatabase(customDir).init()
+    expect(reopenedCustom.getCompanion('badger-custom')).toMatchObject({
+      nickname: '石头', stageName: '铠獾王', evolution_path: 'armor_king', nickname_is_custom: 1,
+    })
+  })
+
+  it('migrates the former moon owl while preserving a traveller-given name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-moon-owl-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run(`INSERT INTO companions (id, species_id, nickname, nickname_is_custom, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['owl-default', 'moon_owl', '银羽学士', 0, 118, 1, 'night_scout', '', 0, now])
+    database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '9')")
+    database.save()
+
+    const reopened = await new StudyDatabase(dir).init()
+    expect(reopened.getCompanion('owl-default')).toMatchObject({
+      nickname: '咕夜枭', stage: 1, stageName: '咕夜枭', evolution_path: '', nickname_is_custom: 0,
+    })
+    expect(reopened.getCompanion('owl-default').personalityProfile.habit).not.toBe('喜欢安静待在身边')
+
+    const customDir = mkdtempSync(join(tmpdir(), 'growth-arc-moon-owl-custom-'))
+    tempDirs.push(customDir)
+    const customDatabase = await new StudyDatabase(customDir).init()
+    customDatabase.run(`INSERT INTO companions (id, species_id, nickname, nickname_is_custom, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['owl-custom', 'moon_owl', '页页', 1, 200, 2, 'moon_sage', '', 0, now])
+    customDatabase.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '9')")
+    customDatabase.save()
+
+    const reopenedCustom = await new StudyDatabase(customDir).init()
+    expect(reopenedCustom.getCompanion('owl-custom')).toMatchObject({
+      nickname: '页页', stageName: '冥翔鹰鸮', evolution_path: 'dusk_owl', nickname_is_custom: 1,
+    })
   })
 })
 

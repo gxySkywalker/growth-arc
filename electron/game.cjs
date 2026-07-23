@@ -7,6 +7,7 @@ const COMPANION_SPECIES = [
     kind: '边境同行犬',
     rarity: 'starter',
     palette: 'honey',
+    finalGrowthMode: 'time_branch',
     description: '与你走过抵达边境前的旧路。它记得回家的方向，也记得总要回头确认你是否跟在身后。',
     stages: ['炉尾', '栗鬃', '长成'],
     evolutions: [
@@ -30,41 +31,44 @@ const COMPANION_SPECIES = [
   },
   {
     id: 'moss_fox',
-    name: '苔原小狐',
-    kind: '狐狸',
+    name: '枝绒',
+    kind: '林缘小狐',
+    defaultNickname: '苔芽',
     rarity: 'common',
     palette: 'moss',
-    description: '脚步很轻，总能从石缝里找到被遗漏的东西。',
-    stages: ['苔尾幼狐', '遗迹灵狐', '翠影领路者'],
+    finalGrowthMode: 'single',
+    description: '住在林缘的苔石与树根之间。它不带路，只会让你看见林中悄悄变换的风、叶与水痕。',
+    stages: ['枝绒', '苔亚', '森冠'],
     evolutions: [
-      { id: 'grove_fox', name: '翠影领路者', note: '熟悉森林里的每条暗路。' },
-      { id: 'ruin_fox', name: '遗迹寻踪者', note: '擅长发现古堡的机关。' },
+      { id: 'forest_crown', name: '森冠', note: '和旅人一起学会留意森林中每一次细微的变化。' },
     ],
   },
   {
     id: 'moon_owl',
-    name: '月塔猫头鹰',
-    kind: '猫头鹰',
+    name: '暮羽子',
+    kind: '月塔鸮',
+    defaultNickname: '暮羽子',
     rarity: 'common',
     palette: 'moon',
-    description: '在高塔窗沿安静观察，偶尔带回写满批注的纸页。',
-    stages: ['圆羽雏鸟', '银羽学士', '月塔贤者'],
+    finalGrowthMode: 'single',
+    description: '栖在旧塔与书塔的高处。它不替人找答案，只让人愿意把夜里尚未说出口的念头安静留下。',
+    stages: ['暮羽子', '咕夜枭', '冥翔鹰鸮'],
     evolutions: [
-      { id: 'moon_sage', name: '月塔贤者', note: '善于整理复杂的线索。' },
-      { id: 'night_scout', name: '夜空巡游者', note: '能在夜色中看见很远。' },
+      { id: 'dusk_owl', name: '冥翔鹰鸮', note: '把与你一起停过的夜色，留成一页安静的远望。' },
     ],
   },
   {
     id: 'river_otter',
-    name: '河湾水獭',
-    kind: '水獭',
+    name: '涟牙',
+    kind: '河湾水獭',
+    defaultNickname: '涟牙',
     rarity: 'common',
     palette: 'river',
-    description: '随身带着一块最喜欢的圆石，做事认真又快活。',
-    stages: ['圆石幼獭', '溪流旅伴', '河湾领航员'],
+    finalGrowthMode: 'single',
+    description: '常在河湾、浅滩与旧石桥旁停留。它不带人渡河，只陪人听水流经过石缝的声音。',
+    stages: ['涟牙', '漪爪', '湾澜'],
     evolutions: [
-      { id: 'river_guide', name: '河湾领航员', note: '能读懂水流和天气。' },
-      { id: 'pearl_keeper', name: '珍珠收藏家', note: '喜欢保存细小而重要的发现。' },
+      { id: 'bay_current', name: '湾澜', note: '把与你一起停留过的河岸，留成一段缓慢流动的时间。' },
     ],
   },
   {
@@ -82,28 +86,30 @@ const COMPANION_SPECIES = [
   },
   {
     id: 'iron_badger',
-    name: '铁砧獾',
-    kind: '獾',
+    name: '石铁獾',
+    kind: '石铁獾',
+    defaultNickname: '小石獾',
     rarity: 'rare',
     palette: 'iron',
-    description: '沉默可靠，会把普通材料打磨成值得珍藏的物件。',
-    stages: ['灰爪幼獾', '铜锤工匠', '王城铸造师'],
+    finalGrowthMode: 'single',
+    description: '住在旧石阶、山脚与石墙旁。它不替人锻造什么，只会让人留意脚下仍被好好放稳的石头。',
+    stages: ['小石獾', '岩甲獾', '铠獾王'],
     evolutions: [
-      { id: 'royal_smith', name: '王城铸造师', note: '擅长修复古老器物。' },
-      { id: 'mountain_warden', name: '山门守卫', note: '拥有让人安心的力量。' },
+      { id: 'armor_king', name: '铠獾王', note: '把一起走过的崎岖路段，留成安稳的陪伴。' },
     ],
   },
   {
     id: 'glimmer_cat',
-    name: '烛影小猫',
-    kind: '猫',
+    name: '灯团',
+    kind: '夜灯小猫',
+    defaultNickname: '灯团',
     rarity: 'rare',
     palette: 'violet',
-    description: '总在烛光照不到的地方出现，尾巴尖像一粒星火。',
-    stages: ['烛芯幼猫', '暮色灵猫', '星烛漫游者'],
+    finalGrowthMode: 'single',
+    description: '常在小镇的窗台与夜灯旁停留。它的尾端像一盏安静的小灯，不替人照路，只陪人待过夜色。',
+    stages: ['灯团', '星烛', '夜璃'],
     evolutions: [
-      { id: 'star_candle', name: '星烛漫游者', note: '能在黑暗里点起细小星光。' },
-      { id: 'velvet_shadow', name: '天鹅绒夜行者', note: '喜欢安静陪伴漫长的夜晚。' },
+      { id: 'night_glass', name: '夜璃', note: '把与你共处的安静，留成一盏稳定的灯。' },
     ],
   },
 ]
@@ -209,6 +215,17 @@ function growthPathForTime(timestamp = Date.now()) {
   return 'moon_paw'
 }
 
+// The species owns its final-growth rule. Chestnut is the only current
+// time-branching companion; a single-route companion must never inherit one
+// of Chestnut's names merely because it happened to reach 200 bond at night.
+function growthPathForCompanion(speciesId, timestamp = Date.now()) {
+  const species = COMPANION_SPECIES.find((item) => item.id === speciesId)
+  if (!species) return ''
+  if (species.finalGrowthMode === 'single') return species.evolutions?.[0]?.id || ''
+  if (species.finalGrowthMode === 'time_branch') return growthPathForTime(timestamp)
+  return ''
+}
+
 const BRIEF_LOCATIONS = ['小屋门前', '城镇路口', '营地附近', '旧路起点']
 const BRIEF_EVENTS = [
   '你出门透了口气，把刚才完成的部分记下便回来了。',
@@ -259,4 +276,5 @@ module.exports = {
   companionStage,
   evolutionReady,
   growthPathForTime,
+  growthPathForCompanion,
 }

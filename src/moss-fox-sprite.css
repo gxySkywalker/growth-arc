@@ -1,0 +1,9 @@
+.moss-fox-sprite { position: relative; display: inline-block; flex: 0 0 auto; image-rendering: pixelated; }
+.moss-fox-sprite-frame { display: block; width: 100%; height: 100%; background-repeat: no-repeat; background-size: 400% 400%; image-rendering: pixelated; }
+.moss-fox-sprite-small { width: 48px; height: 48px; }
+.moss-fox-sprite-medium { width: 72px; height: 72px; }
+.moss-fox-sprite-large { width: 96px; height: 96px; }
+.moss-fox-sprite-scene { width: 100%; height: 100%; }
+.moss-fox-sprite-grown { transform: scale(1.28); transform-origin: center bottom; }
+.moss-fox-sprite-final { transform: scale(1.55); transform-origin: center bottom; }
+.moss-fox-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #f4ffe2; font-style: normal; font-size: 11px; }

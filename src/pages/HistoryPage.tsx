@@ -131,6 +131,7 @@ export function HistoryPage() {
                   <span className="chronicle-tier">{ex.tier.name}</span>
                   <span className="chronicle-location">{ex.location}</span>
                   {ex.activeCompanion && <span className="chronicle-companion">
+                    <PixelCompanion companion={ex.activeCompanion} size="small" />
                     与{ex.activeCompanion.nickname || '伙伴'}同行
                   </span>}
                 </div>}

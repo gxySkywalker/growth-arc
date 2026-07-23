@@ -22,6 +22,8 @@ const bondChapter = (companion: Companion) => {
 }
 
 const chestnutIntroduction = '它陪你走过抵达边境前的旧路，也和你一起推开炉火小屋的门。它不替你决定方向；只是总会先闻一闻路，再回头确认你是否还在身后。'
+const mossSproutIntroduction = '它住在林缘的苔石与树根之间，不替你带路，也不替你寻找答案。它只是陪你停一下，看见风、落叶与雨后的水痕原来一直在变化。'
+const nightLightCatIntroduction = '它常在窗台与夜灯旁停留。尾端的一点光不替你照亮前路，只让安静的夜里，也有一盏灯愿意和你待在一起。'
 
 export function GrowthPage() {
   const { dashboard, refresh, notify } = useApp()
@@ -39,6 +41,8 @@ export function GrowthPage() {
   const selectedPortrait = selected ? getCompanionCampPortrait(selected) : null
   const chapter = selected ? bondChapter(selected) : null
   const isChestnut = selected?.species_id === 'hearth_hound'
+  const isMossSprout = selected?.species_id === 'moss_fox'
+  const isNightLightCat = selected?.species_id === 'glimmer_cat'
   const progress = selected && chapter ? selected.stage >= 2 ? 100 : Math.min(100, selected.bond_xp / chapter.next * 100) : 0
   const togetherDays = selected ? daysTogether(selected.met_at) : 0
 
@@ -96,7 +100,7 @@ export function GrowthPage() {
 
       {selected && chapter && <article className="camp-v2-profile">
         <div className={`camp-v2-portrait ${selectedPortrait ? 'has-portrait' : ''}`}>
-          <div className="camp-v2-portrait-copy"><span>{isChestnut ? '最初的同行伙伴' : '旅途中的朋友'}</span><strong>{isChestnut ? '旧路的铃声，还在炉火旁轻轻响。' : '每一次相遇，都有它自己的来处。'}</strong></div>
+          <div className="camp-v2-portrait-copy"><span>{isChestnut ? '最初的同行伙伴' : isMossSprout ? '林缘的同行者' : isNightLightCat ? '夜灯旁的朋友' : '旅途中的朋友'}</span><strong>{isChestnut ? '旧路的铃声，还在炉火旁轻轻响。' : isMossSprout ? '风吹开落叶时，它总会停下来多看一会儿。' : isNightLightCat ? '它的尾灯没有催促什么，只安静地亮在窗边。' : '每一次相遇，都有它自己的来处。'}</strong></div>
           {selectedPortrait ? <img className="companion-camp-portrait" src={selectedPortrait} alt={`${selected.nickname}的营地肖像`} /> : <PixelCompanion companion={selected} />}
           <div className="camp-v2-portrait-floor" />
         </div>
@@ -106,8 +110,8 @@ export function GrowthPage() {
           <div className="camp-v2-name-row"><h2>{selected.nickname}</h2><button className="camp-v2-rename" onClick={openRename} title="给伙伴改名">改名</button></div>
           <p className="camp-v2-stage">{selected.stageName} <span>·</span> 羁绊章节：{chapter.name}</p>
           <div className="camp-v2-together"><span>与你同行第 {togetherDays} 天</span><small>{formatDay(selected.met_at)}，这段同行被记在旅途的第一页。</small></div>
-          <p className="camp-v2-introduction">{isChestnut ? chestnutIntroduction : selected.species.description}</p>
-          <div className="camp-v2-home-note"><span>⌂</span><p>{selected.personalityProfile.habit}。在小屋里，它把这当作一件不必解释的小事。</p></div>
+          <p className="camp-v2-introduction">{isChestnut ? chestnutIntroduction : isMossSprout ? mossSproutIntroduction : isNightLightCat ? nightLightCatIntroduction : selected.species.description}</p>
+          <div className="camp-v2-home-note"><span>⌂</span><p>{selected.personalityProfile.habit}。{isMossSprout ? '在小屋里，它也会安静看着窗边的光影移动。' : isNightLightCat ? '在小屋里，它不必说话，只把尾灯留在离你不远的地方。' : '在小屋里，它把这当作一件不必解释的小事。'}</p></div>
 
           <div className="camp-v2-bond" aria-label={`羁绊 ${selected.bond_xp}`}>
             <div><span>共同走过</span><strong>{selected.bond_xp} <small>/ {chapter.next}</small></strong></div>
@@ -141,7 +145,7 @@ export function GrowthPage() {
           <span />
           <div className={selected.stage >= 2 ? 'reached' : ''}><i>03</i><strong>{selected.stage >= 2 ? selected.stageName : '长成'}</strong><small>200 羁绊</small></div>
         </div>
-        <p>{selected.stage >= 2 ? `${selected.nickname}在${formatDay(selected.growth_completed_at) || '那一天'}长成了「${selected.stageName}」。` : '当羁绊抵达 200，它会在那一刻的天光里长成；白日、傍晚与夜晚，留下的是不同的陪伴方式，而非强弱。'}</p>
+        <p>{selected.stage >= 2 ? `${selected.nickname}在${formatDay(selected.growth_completed_at) || '那一天'}长成了「${selected.stageName}」。` : isChestnut ? '当羁绊抵达 200，它会在那一刻的天光里长成；白日、傍晚与夜晚，留下的是不同的陪伴方式，而非强弱。' : isMossSprout ? '当羁绊抵达 200，它会长成「森冠」；这不是更强，而是你们已经一起熟悉了森林的变化。' : isNightLightCat ? '当羁绊抵达 200，它会长成「夜璃」；不是为了照亮更远的路，而是让同处的夜色变得熟悉。' : '当羁绊抵达 200，它会在共同经历中长成更完整的自己。'}</p>
       </article>
     </section>}
 

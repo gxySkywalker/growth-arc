@@ -40,6 +40,9 @@ export function CompanionGrowthCeremony({ event, onComplete }: { event: Companio
     evolution_path: '',
   }), [event])
   const after = useMemo<Companion>(() => ({ ...event.companion, stage: event.stage, stageName: stageName(event.companion, event.stage) }), [event])
+  const isChestnut = event.companion.species_id === 'hearth_hound'
+  const isMossSprout = event.companion.species_id === 'moss_fox'
+  const isNightLightCat = event.companion.species_id === 'glimmer_cat'
 
   useEffect(() => {
     playGrowthChime()
@@ -52,7 +55,7 @@ export function CompanionGrowthCeremony({ event, onComplete }: { event: Companio
   const copy = phase === 'notice'
     ? `${event.companion.nickname}的身体，好像发生了一些变化……`
     : phase === 'shift'
-      ? '旧路的铜铃在光里轻轻响着。'
+      ? isChestnut ? '旧路的铜铃在光里轻轻响着。' : isMossSprout ? '窗外的叶影在光里轻轻摇动。' : isNightLightCat ? '尾端的小灯在光里轻轻亮起。' : '这一段共同走过的日子，在光里轻轻亮起。'
       : phase === 'reveal'
         ? '光慢慢安静下来。'
         : `${before.stageName}长成了${after.stageName}。`

@@ -1,0 +1,9 @@
+.night-light-cat-sprite { position: relative; display: inline-block; flex: 0 0 auto; image-rendering: pixelated; }
+.night-light-cat-sprite-frame { display: block; width: 100%; height: 100%; background-repeat: no-repeat; background-size: 400% 400%; image-rendering: pixelated; }
+.night-light-cat-sprite-small { width: 48px; height: 48px; }
+.night-light-cat-sprite-medium { width: 72px; height: 72px; }
+.night-light-cat-sprite-large { width: 96px; height: 96px; }
+.night-light-cat-sprite-scene { width: 100%; height: 100%; }
+.night-light-cat-sprite-grown { transform: scale(1.28); transform-origin: center bottom; }
+.night-light-cat-sprite-final { transform: scale(1.55); transform-origin: center bottom; }
+.night-light-cat-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #fff1a2; font-style: normal; font-size: 11px; }

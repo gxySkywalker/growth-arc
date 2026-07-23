@@ -5,4 +5,5 @@
 .hearth-hound-sprite-large { width: 96px; height: 96px; }
 .hearth-hound-sprite-scene { width: 100%; height: 100%; }
 .hearth-hound-sprite-grown { transform: scale(1.28); transform-origin: center bottom; }
+.hearth-hound-sprite-final { transform: scale(1.55); transform-origin: center bottom; }
 .hearth-hound-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #fff0c9; font-style: normal; font-size: 11px; }

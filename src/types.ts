@@ -78,6 +78,7 @@ export interface Companion {
   id: string
   species_id: string
   nickname: string
+  nickname_is_custom?: number
   bond_xp: number
   stage: number
   stageName: string

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error The Electron game module is CommonJS and intentionally shared with tests.
 import game from '../../electron/game.cjs'
 
-const { durationTier, rollExpedition, companionStage, evolutionReady } = game
+const { durationTier, rollExpedition, companionStage, evolutionReady, growthPathForCompanion, COMPANION_SPECIES } = game
 
 describe('expedition rules', () => {
   it('improves reward tiers with healthy duration caps', () => {
@@ -25,5 +25,64 @@ describe('expedition rules', () => {
     expect(companionStage(100)).toBe(1)
     expect(companionStage(200)).toBe(2)
     expect(evolutionReady(200)).toBe(true)
+  })
+
+  it('keeps the Lin Yuan fox on its single forest growth route', () => {
+    const mossFox = COMPANION_SPECIES.find((species: { id: string }) => species.id === 'moss_fox')
+    expect(mossFox).toMatchObject({
+      name: '枝绒',
+      kind: '林缘小狐',
+      defaultNickname: '苔芽',
+      stages: ['枝绒', '苔亚', '森冠'],
+      finalGrowthMode: 'single',
+    })
+    expect(growthPathForCompanion('moss_fox', new Date('2026-07-23T22:00:00').getTime())).toBe('forest_crown')
+  })
+
+  it('keeps the night-light cat on its one quiet growth route', () => {
+    const cat = COMPANION_SPECIES.find((species: { id: string }) => species.id === 'glimmer_cat')
+    expect(cat).toMatchObject({
+      name: '灯团',
+      kind: '夜灯小猫',
+      stages: ['灯团', '星烛', '夜璃'],
+      finalGrowthMode: 'single',
+    })
+    expect(growthPathForCompanion('glimmer_cat')).toBe('night_glass')
+  })
+
+  it('keeps the river otter on one non-utility growth route', () => {
+    const otter = COMPANION_SPECIES.find((species: { id: string }) => species.id === 'river_otter')
+    expect(otter).toMatchObject({
+      name: '涟牙',
+      kind: '河湾水獭',
+      defaultNickname: '涟牙',
+      stages: ['涟牙', '漪爪', '湾澜'],
+      finalGrowthMode: 'single',
+    })
+    expect(growthPathForCompanion('river_otter')).toBe('bay_current')
+  })
+
+  it('keeps the stone-iron badger on its one non-utility growth route', () => {
+    const badger = COMPANION_SPECIES.find((species: { id: string }) => species.id === 'iron_badger')
+    expect(badger).toMatchObject({
+      name: '石铁獾',
+      kind: '石铁獾',
+      defaultNickname: '小石獾',
+      stages: ['小石獾', '岩甲獾', '铠獾王'],
+      finalGrowthMode: 'single',
+    })
+    expect(growthPathForCompanion('iron_badger')).toBe('armor_king')
+  })
+
+  it('keeps the moon owl on its one quiet night-page growth route', () => {
+    const owl = COMPANION_SPECIES.find((species: { id: string }) => species.id === 'moon_owl')
+    expect(owl).toMatchObject({
+      name: '暮羽子',
+      kind: '月塔鸮',
+      defaultNickname: '暮羽子',
+      stages: ['暮羽子', '咕夜枭', '冥翔鹰鸮'],
+      finalGrowthMode: 'single',
+    })
+    expect(growthPathForCompanion('moon_owl')).toBe('dusk_owl')
   })
 })
