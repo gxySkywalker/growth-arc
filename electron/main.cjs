@@ -3,7 +3,7 @@ const path = require('node:path')
 const fs = require('node:fs')
 const { ProxyAgent } = require('undici')
 const { StudyDatabase } = require('./database.cjs')
-const { generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody } = require('./angel-ai.cjs')
+const { generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody, resolveAngelAiConfig } = require('./angel-ai.cjs')
 
 let mainWindow
 let tray
@@ -138,12 +138,13 @@ async function ensureAiNarratives() {
   const MAX_RETRIES = 3
   const GLOBAL_TIMEOUT = 60000 // 60s max for all letters
   const deadline = Date.now() + GLOBAL_TIMEOUT
+  const summary = { considered: 0, polished: 0, failed: 0, skipped: 0 }
 
   // Only process NEW letters (pending), not historical template letters.
   // Failed letters with retries remaining are also retried.
   if (!readApiKey()) {
     database.run("UPDATE letters SET ai_status = 'skipped' WHERE ai_status = 'pending'")
-    return
+    return summary
   }
 
   const pending = database.all(
@@ -156,6 +157,7 @@ async function ensureAiNarratives() {
   for (const letter of pending) {
     if (Date.now() > deadline) break // global timeout
     if (!isAngelNarrativeEligible(letter)) continue
+    summary.considered += 1
     const result = await generateLetterNarrative(letter)
     if (result.success) {
       const useAiBody = shouldUseAiBody(letter) ? 1 : 0
@@ -163,8 +165,10 @@ async function ensureAiNarratives() {
         "UPDATE letters SET ai_body = ?, body_source = CASE WHEN ? = 1 AND is_read = 0 AND body_source = 'template' THEN 'ai' ELSE body_source END, ai_status = 'success', ai_provider = ?, ai_model = ?, ai_prompt_version = ?, ai_retry_count = 0 WHERE id = ?",
         [result.text, useAiBody, result.provider, result.model, ANGEL_PROMPT_VERSION, letter.id]
       )
+      summary.polished += 1
     } else if (result.status === 'skipped') {
       database.run("UPDATE letters SET ai_status = 'skipped' WHERE id = ?", [letter.id])
+      summary.skipped += 1
     } else {
       const newRetry = (letter.ai_retry_count || 0) + 1
       const finalStatus = newRetry >= MAX_RETRIES ? 'failed' : result.status
@@ -172,8 +176,10 @@ async function ensureAiNarratives() {
         "UPDATE letters SET ai_status = ?, ai_retry_count = ? WHERE id = ?",
         [finalStatus, newRetry, letter.id]
       )
+      summary.failed += 1
     }
   }
+  return summary
 }
 
 // ── Test letter: verify AI configuration works ──────────────
@@ -183,8 +189,9 @@ async function generateTestLetter() {
   if (!apiKey) return { success: false, error: '没有配置信笺钥匙' }
 
   const settings = database.getSettings()
-  const provider = settings.api_provider || 'openai'
-  const model = settings.model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-5.6-luna')
+  let config
+  try { config = resolveAngelAiConfig(settings) } catch (error) { return { success: false, error: error.message } }
+  const { provider, model, baseUrl } = config
 
   const testFact = {
     letterType: 'daily',
@@ -192,9 +199,8 @@ async function generateTestLetter() {
   }
   const systemPrompt = ANGEL_PROMPT + '\n\n## 测试信笺\n' + JSON.stringify(testFact)
 
-  const baseUrl = settings.ai_base_url || settings.proxy_url || (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1')
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -213,7 +219,7 @@ async function generateTestLetter() {
     const text = json.choices?.[0]?.message?.content?.trim()
     return text ? { success: true, text, provider, model } : { success: false, error: '空响应' }
   } catch (e) {
-    return { success: false, error: e.message }
+    return { success: false, error: e?.message || '网络请求失败' }
   }
 }
 
@@ -466,6 +472,10 @@ function registerHandlers() {
     const periodic = database.ensurePeriodicLetters(now)
     const events = database.ensureEventLetters(now)
     const birthday = database.ensureBirthdayLetter(now)
+    // Periodic letters can also be created while the app remains open. Queue
+    // their optional narration immediately, without delaying the UI or the
+    // template-letter fallback.
+    ensureAiNarratives().catch(() => {})
     return { ...periodic, events, birthday }
   })
   ipcMain.on('window:show', showWindow)
@@ -483,6 +493,7 @@ app.whenReady().then(async () => {
   powerMonitor.on('suspend', () => database.autoPauseForSuspend())
   powerMonitor.on('resume', () => {
     try { database.ensurePeriodicLetters(); database.ensureEventLetters(); database.ensureBirthdayLetter() } catch (_) { /* non-critical */ }
+    ensureAiNarratives().catch(() => {})
     if (database.getActiveSession()?.status === 'paused' && Notification.isSupported()) {
       new Notification({ title: '专注已自动暂停', body: '电脑刚刚恢复，请确认是否继续。' }).show()
     }

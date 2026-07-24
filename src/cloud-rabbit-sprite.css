@@ -1,0 +1,9 @@
+.cloud-rabbit-sprite { position: relative; display: inline-block; flex: 0 0 auto; image-rendering: pixelated; }
+.cloud-rabbit-sprite-frame { display: block; width: 100%; height: 100%; background-repeat: no-repeat; background-size: 400% 400%; image-rendering: pixelated; }
+.cloud-rabbit-sprite-small { width: 48px; height: 48px; }
+.cloud-rabbit-sprite-medium { width: 72px; height: 72px; }
+.cloud-rabbit-sprite-large { width: 96px; height: 96px; }
+.cloud-rabbit-sprite-scene { width: 100%; height: 100%; }
+.cloud-rabbit-sprite-grown { transform: scale(1.28); transform-origin: center bottom; }
+.cloud-rabbit-sprite-final { transform: scale(1.55); transform-origin: center bottom; }
+.cloud-rabbit-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #fff1a2; font-style: normal; font-size: 11px; }

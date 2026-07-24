@@ -22,6 +22,15 @@ import riverOtterBayCurrentWalkAtlas from '../../assets/art/characters/companion
 import ironBadgerWalkAtlas from '../../assets/art/characters/companions/iron_badger_stage-0_walk_48_v1.png'
 import ironBadgerGrownWalkAtlas from '../../assets/art/characters/companions/iron_badger_stage-1_walk_48_v1.png'
 import ironBadgerArmorKingWalkAtlas from '../../assets/art/characters/companions/iron_badger_armor_king_walk_48_v1.png'
+import moonOwlWalkAtlas from '../../assets/art/characters/companions/moon_owl_stage-0_walk_48_v1.png'
+import moonOwlGrownWalkAtlas from '../../assets/art/characters/companions/moon_owl_stage-1_walk_48_v1.png'
+import moonOwlFinalWalkAtlas from '../../assets/art/characters/companions/moon_owl_dusk_owl_walk_48_v1.png'
+import cloudRabbitWalkAtlas from '../../assets/art/characters/companions/cloud_rabbit_stage-0_walk_48_v1.png'
+import cloudRabbitGrownWalkAtlas from '../../assets/art/characters/companions/cloud_rabbit_stage-1_walk_48_v1.png'
+import cloudRabbitFinalWalkAtlas from '../../assets/art/characters/companions/cloud_rabbit_wind_tuft_rabbit_walk_48_v1.png'
+import emberDrakeWalkAtlas from '../../assets/art/characters/companions/ember_drake_stage-0_walk_48_v1.png'
+import emberDrakeGrownWalkAtlas from '../../assets/art/characters/companions/ember_drake_stage-1_walk_48_v1.png'
+import emberDrakeFinalWalkAtlas from '../../assets/art/characters/companions/ember_drake_ember_drake_walk_48_v1.png'
 import {
   COTTAGE_PLAYER_HEIGHT,
   COTTAGE_PLAYER_WIDTH,
@@ -132,11 +141,23 @@ export function PixiCottageScene({
         const selectedIronBadgerAtlas = companion?.stage && companion.stage >= 2 && companion.evolution_path === 'armor_king'
           ? ironBadgerArmorKingWalkAtlas
           : companion?.stage && companion.stage >= 1 ? ironBadgerGrownWalkAtlas : ironBadgerWalkAtlas
-        const usesProductionAtlas = !companion || ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger'].includes(companion.species_id)
+        const selectedMoonOwlAtlas = companion?.stage && companion.stage >= 2 && companion.evolution_path === 'dusk_owl'
+          ? moonOwlFinalWalkAtlas
+          : companion?.stage && companion.stage >= 1 ? moonOwlGrownWalkAtlas : moonOwlWalkAtlas
+        const selectedCloudRabbitAtlas = companion?.stage && companion.stage >= 2 && companion.evolution_path === 'wind_tuft_rabbit'
+          ? cloudRabbitFinalWalkAtlas
+          : companion?.stage && companion.stage >= 1 ? cloudRabbitGrownWalkAtlas : cloudRabbitWalkAtlas
+        const selectedEmberDrakeAtlas = companion?.stage && companion.stage >= 2 && companion.evolution_path === 'ember_drake'
+          ? emberDrakeFinalWalkAtlas
+          : companion?.stage && companion.stage >= 1 ? emberDrakeGrownWalkAtlas : emberDrakeWalkAtlas
+        const usesProductionAtlas = !companion || ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger', 'moon_owl', 'cloud_rabbit', 'ember_drake'].includes(companion.species_id)
         const selectedCompanionAtlas = companion?.species_id === 'moss_fox'
           ? selectedMossAtlas
           : companion?.species_id === 'glimmer_cat' ? selectedNightLightCatAtlas
-            : companion?.species_id === 'river_otter' ? selectedRiverOtterAtlas : selectedHoundAtlas
+            : companion?.species_id === 'river_otter' ? selectedRiverOtterAtlas
+              : companion?.species_id === 'moon_owl' ? selectedMoonOwlAtlas
+                : companion?.species_id === 'cloud_rabbit' ? selectedCloudRabbitAtlas
+                  : companion?.species_id === 'ember_drake' ? selectedEmberDrakeAtlas : selectedHoundAtlas
         const resolvedCompanionAtlas = companion?.species_id === 'iron_badger' ? selectedIronBadgerAtlas : selectedCompanionAtlas
         const [backdropTexture, playerAtlas, houndAtlas] = await Promise.all([
           loadTexture(roomBackdrop),
@@ -177,12 +198,13 @@ export function PixiCottageScene({
           const palette = companion.species.palette === 'ember' ? 0xa84c32 : companion.species.palette === 'moon' ? 0xaaa6a0 : 0x7d8150
           sceneCompanion = new Graphics().roundRect(5, 7, 22, 20, 3).fill({ color: palette }).rect(8, 4, 16, 5).fill({ color: palette })
         }
-        const usesStagedProductionArt = ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger'].includes(companion?.species_id || 'hearth_hound')
+        const usesStagedProductionArt = ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger', 'moon_owl', 'cloud_rabbit', 'ember_drake'].includes(companion?.species_id || 'hearth_hound')
         const companionStage = companion?.stage || 0
         const companionSize = usesStagedProductionArt && companionStage >= 2 ? 56 : usesStagedProductionArt && companionStage >= 1 ? 48 : 40
+        const companionHover = companion?.species_id === 'ember_drake' && companionStage >= 1 ? companionStage >= 2 ? 6 : 4 : 0
         sceneCompanion.width = companionSize
         sceneCompanion.height = companionSize
-        sceneCompanion.position.set(COTTAGE_COMPANION_POSITION.x + (32 - companionSize) / 2, COTTAGE_COMPANION_POSITION.y + 32 - companionSize)
+        sceneCompanion.position.set(COTTAGE_COMPANION_POSITION.x + (32 - companionSize) / 2, COTTAGE_COMPANION_POSITION.y + 32 - companionSize - companionHover)
         sceneCompanion.zIndex = 180 + COTTAGE_COMPANION_POSITION.y + 32
         companionSpriteRef.current = sceneCompanion
 
@@ -224,10 +246,11 @@ export function PixiCottageScene({
     player.position.set(position.x, position.y)
     player.zIndex = 200 + position.y + COTTAGE_PLAYER_HEIGHT
     if (playerFramesRef.current) player.texture = playerFramesRef.current[direction][walkFrame]
-    const usesStagedProductionArt = ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger'].includes(companion?.species_id || 'hearth_hound')
+    const usesStagedProductionArt = ['hearth_hound', 'moss_fox', 'glimmer_cat', 'river_otter', 'iron_badger', 'moon_owl', 'cloud_rabbit', 'ember_drake'].includes(companion?.species_id || 'hearth_hound')
     const companionStage = companion?.stage || 0
     const companionSize = usesStagedProductionArt && companionStage >= 2 ? 56 : usesStagedProductionArt && companionStage >= 1 ? 48 : 40
-    sceneCompanion.position.set(COTTAGE_COMPANION_POSITION.x + (32 - companionSize) / 2, COTTAGE_COMPANION_POSITION.y + 32 - companionSize)
+    const companionHover = companion?.species_id === 'ember_drake' && companionStage >= 1 ? companionStage >= 2 ? 6 : 4 : 0
+    sceneCompanion.position.set(COTTAGE_COMPANION_POSITION.x + (32 - companionSize) / 2, COTTAGE_COMPANION_POSITION.y + 32 - companionSize - companionHover)
     sceneCompanion.zIndex = 180 + COTTAGE_COMPANION_POSITION.y + 32
     if (houndSpriteRef.current && companionFramesRef.current) {
       const deltaX = position.x - COTTAGE_COMPANION_POSITION.x

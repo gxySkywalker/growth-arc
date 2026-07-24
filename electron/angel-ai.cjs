@@ -66,15 +66,29 @@ function shouldUseAiBody(letter) {
   return Number(letter?.is_read) !== 1
 }
 
+function resolveAngelAiConfig(settings = {}) {
+  const provider = ['deepseek', 'openai', 'custom'].includes(settings.api_provider) ? settings.api_provider : 'openai'
+  const model = String(settings.model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-5.6-luna')).trim()
+  const defaultBaseUrl = provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
+  // A provider's saved endpoint is only meaningful for the explicit custom
+  // option. This prevents a stale custom URL from silently intercepting a
+  // later DeepSeek/OpenAI connection test or letter request.
+  const baseUrl = provider === 'custom'
+    ? String(settings.ai_base_url || settings.proxy_url || '').trim()
+    : defaultBaseUrl
+  if (!baseUrl) throw new Error('请先填写自定义信使地址')
+  return { provider, model, baseUrl: baseUrl.replace(/\/$/, '') }
+}
+
 async function generateAngelNarrative({ letter, apiKey, settings = {}, prompt, fetchImpl = fetch, timeoutMs = 30000 }) {
   if (!apiKey) return { success: false, status: 'skipped' }
   let fact
   try { fact = buildNarrativeFactEnvelope(letter) } catch (error) { return { success: false, status: 'failed', error: error.message } }
-  const provider = settings.api_provider || 'openai'
-  const model = settings.model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-5.6-luna')
-  const baseUrl = settings.ai_base_url || settings.proxy_url || (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1')
+  let config
+  try { config = resolveAngelAiConfig(settings) } catch (error) { return { success: false, status: 'failed', error: error.message } }
+  const { provider, model, baseUrl } = config
   try {
-    const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const response = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model, max_tokens: 600, messages: [{ role: 'system', content: `${prompt}\n\n## 当前信件事实\n${JSON.stringify(fact)}` }, { role: 'user', content: '请根据当前事实，以小天使的口吻写一封短信。' }] }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -86,4 +100,4 @@ async function generateAngelNarrative({ letter, apiKey, settings = {}, prompt, f
   } catch (error) { return { success: false, status: 'failed', error: error?.message || 'request failed' } }
 }
 
-module.exports = { buildNarrativeFactEnvelope, generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody }
+module.exports = { buildNarrativeFactEnvelope, generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody, resolveAngelAiConfig }

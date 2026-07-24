@@ -44,14 +44,16 @@ export function ObservatoryPage({ obsNavTarget, onObsConsumed, navState, dispatc
   const [saved, setSaved] = useState(false)
   const reviewLoaded = useRef(false)
   const latestTs = useRef(cursor)
+  const latestRequest = useRef(0)
 
   const load = useCallback(async (ts: number) => {
+    const requestId = ++latestRequest.current
     latestTs.current = ts
     setLoading(true)
     try {
       if (tab === 'daily') {
         const d = await window.growthArc.observatory.getDaily(ts)
-        if (latestTs.current !== ts) return
+        if (latestRequest.current !== requestId) return
         if (DEV) console.log('[obs] cursor', ts, '→ raw daily', d)
         setDaily(d)
         if (!reviewLoaded.current && d.review) {
@@ -63,7 +65,7 @@ export function ObservatoryPage({ obsNavTarget, onObsConsumed, navState, dispatc
         }
       } else {
         const w = await window.growthArc.observatory.getWeekly(ts)
-        if (latestTs.current !== ts) return
+        if (latestRequest.current !== requestId) return
         if (DEV) console.log('[obs] cursor', ts, '→ raw weekly', w)
         setWeekly(w)
         if (!reviewLoaded.current) {
@@ -72,7 +74,7 @@ export function ObservatoryPage({ obsNavTarget, onObsConsumed, navState, dispatc
         }
       }
     } catch (e) { notify(friendlyError(e), 'error') }
-    finally { setLoading(false) }
+    finally { if (latestRequest.current === requestId) setLoading(false) }
   }, [tab, notify])
 
   useEffect(() => { void load(cursor) }, [load, cursor])

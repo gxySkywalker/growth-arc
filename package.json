@@ -1,6 +1,6 @@
 {
   "name": "growth-arc",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "A private, local-first learning and focus system",
   "main": "electron/main.cjs",
@@ -23,6 +23,8 @@
     "art:prepare:cottage-structure": "node scripts/prepare-cottage-structure-drafts.mjs",
     "art:test:cottage-structure": "node scripts/build-cottage-structure-test.mjs",
     "art:prepare:player-idle": "node scripts/prepare-player-idle-draft.mjs",
+    "art:prepare:cloud-rabbit": "node scripts/prepare-cloud-rabbit-forms.mjs",
+    "art:prepare:ember-drake": "node scripts/prepare-ember-drake-forms.mjs",
     "art:build:cottage-backdrop": "node scripts/build-cottage-runtime-backdrop.mjs",
     "dist": "npm run build && electron-builder --win nsis"
   },

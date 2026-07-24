@@ -19,14 +19,15 @@ const COMPANION_SPECIES = [
   {
     id: 'ember_drake',
     name: '余烬古龙',
-    kind: '古龙',
+    kind: '余烬古龙',
+    defaultNickname: '小火牙',
     rarity: 'rare',
     palette: 'ember',
-    description: '体内留着古老火焰，对宝藏和旧书有同样浓厚的兴趣。',
-    stages: ['火种幼龙', '赤铜翼龙', '古焰龙王'],
+    finalGrowthMode: 'single',
+    description: '栖在边境群山与未完整绘入地图的山脊。它不带人飞向远方，只让人学会敬意地看见未知。',
+    stages: ['小火牙', '赤翼龙', '余烬古龙'],
     evolutions: [
-      { id: 'archive_dragon', name: '书库守龙', note: '守护知识与古老卷册。' },
-      { id: 'sky_dragon', name: '天穹寻宝龙', note: '追逐云层之上的遗迹。' },
+      { id: 'ember_drake', name: '余烬古龙', note: '把与你一起看过、尚未抵达的远方，留成温暖而克制的记忆。' },
     ],
   },
   {
@@ -74,14 +75,15 @@ const COMPANION_SPECIES = [
   {
     id: 'cloud_rabbit',
     name: '云丘垂耳兔',
-    kind: '兔子',
+    kind: '云丘垂耳兔',
+    defaultNickname: '小丘',
     rarity: 'rare',
     palette: 'cloud',
-    description: '看起来软绵绵的，跑起来却像山风一样快。',
-    stages: ['云团幼兔', '风铃旅兔', '云丘信使'],
+    finalGrowthMode: 'single',
+    description: '住在开阔丘陵与风车古道旁。它不催人追上远方，只陪人知道慢一点也没有关系。',
+    stages: ['小丘', '云丘兔', '风茸旅兔'],
     evolutions: [
-      { id: 'cloud_courier', name: '云丘信使', note: '把好消息送到很远的地方。' },
-      { id: 'storm_runner', name: '风暴疾行者', note: '越是艰难的天气越有精神。' },
+      { id: 'wind_tuft_rabbit', name: '风茸旅兔', note: '把与你一起慢慢走过的开阔草坡，留成不必着急的陪伴。' },
     ],
   },
   {
@@ -115,15 +117,18 @@ const COMPANION_SPECIES = [
 ]
 
 const LOOT = [
-  { id: 'copper_coin', name: '旧王朝铜币', rarity: 'common', icon: 'coin', description: '边缘已经磨圆，仍能看见王冠的纹样。' },
-  { id: 'map_scrap', name: '手绘地图碎片', rarity: 'common', icon: 'map', description: '拼起来也许能通向下一座遗迹。' },
-  { id: 'herb_bundle', name: '山野药草束', rarity: 'common', icon: 'herb', description: '带着太阳晒过后的清香。' },
+  { id: 'copper_coin', name: '旧王朝铜币', rarity: 'common', icon: 'coin', description: '边缘已经磨圆，仍能看见王冠的纹样。将来能与城镇和商队交易。' },
+  { id: 'map_scrap', name: '手绘地图碎片', rarity: 'common', icon: 'map', description: '拼齐十张，可以开通一处新的远征地点。' },
+  { id: 'herb_bundle', name: '山野药草束', rarity: 'common', icon: 'herb', description: '带着太阳晒过后的清香。十束可熬成药汤，为将来生病的伙伴准备。' },
   { id: 'berry_bread', name: '莓果旅行面包', rarity: 'common', icon: 'bread', description: '伙伴们很喜欢的远征口粮。' },
-  { id: 'amber_chip', name: '蜜色琥珀碎片', rarity: 'common', icon: 'gem', description: '靠近壁炉时会微微发亮。' },
+  { id: 'river_stone', name: '河岸圆石', rarity: 'uncommon', icon: 'wave', description: '被河水磨得温润圆滑。涟牙会把它悄悄排在身边。' },
+  { id: 'wind_hill_feather', name: '风丘羽毛', rarity: 'uncommon', icon: 'star', description: '沾着高处风声的羽毛。暮羽子会在夜里认出它。' },
+  { id: 'amber_chip', name: '蜜色琥珀碎片', rarity: 'rare', icon: 'gem', description: '靠近壁炉时会微微发亮。十枚可在火炉合成珍稀蜜色琥珀。' },
   { id: 'moon_compass', name: '月银罗盘', rarity: 'rare', icon: 'compass', description: '指针不朝北方，只朝向仍未发现的宝藏。' },
   { id: 'dragon_scale', name: '古龙鳞片', rarity: 'rare', icon: 'scale', description: '温热而坚硬，来自很久以前的一次蜕鳞。' },
   { id: 'star_glass', name: '星辉玻璃', rarity: 'rare', icon: 'star', description: '无论白天黑夜，里面都像装着一小片星空。' },
-  { id: 'silver_bell', name: '旅者银铃', rarity: 'rare', icon: 'bell', description: '只有新朋友靠近时才会响起。' },
+  { id: 'silver_bell', name: '旅者银铃', rarity: 'precious', icon: 'bell', description: '只有新朋友靠近时才会响起；铃声会一直留到相遇发生。' },
+  { id: 'ancient_tower_page', name: '古塔残页', rarity: 'precious', icon: 'book', description: '残页边缘写着尚未辨认的塔名。' },
 ]
 
 const LOCATIONS = ['长满常春藤的旧城门', '松林深处的石桥', '山脚下的废弃驿站', '河谷旁的圆顶塔楼', '风车丘陵的古道', '王城外的莓果林']
@@ -137,13 +142,13 @@ const EVENTS = [
 ]
 
 const DURATION_TIERS = [
-  { min: 90, id: 'epic', name: '史诗远征', commonCount: 3, rareChance: 0.20, companionChance: 0.14 },
-  { min: 60, id: 'deep', name: '深层探索', commonCount: 2, rareChance: 0.15, companionChance: 0.11 },
-  { min: 45, id: 'ruins', name: '遗迹深入', commonCount: 2, rareChance: 0.10, companionChance: 0.09 },
-  { min: 25, id: 'standard', name: '标准远征', commonCount: 1, rareChance: 0.06, companionChance: 0.07 },
-  { min: 15, id: 'short', name: '林间短途', commonCount: 1, rareChance: 0.03, companionChance: 0.05 },
-  { min: 5, id: 'scout', name: '营地侦察', commonCount: 1, rareChance: 0.01, companionChance: 0.02 },
-  { min: 0, id: 'brief', name: '门外散步', commonCount: 1, rareChance: 0, companionChance: 0 },
+  { min: 90, id: 'epic', name: '史诗远征', commonCount: 3, uncommonChance: 0.22, rareChance: 0.20, preciousChance: 0.03, companionChance: 0.05 },
+  { min: 60, id: 'deep', name: '深层探索', commonCount: 2, uncommonChance: 0.18, rareChance: 0.15, preciousChance: 0.02, companionChance: 0.03 },
+  { min: 45, id: 'ruins', name: '遗迹深入', commonCount: 2, uncommonChance: 0.14, rareChance: 0.10, preciousChance: 0.012, companionChance: 0.01 },
+  { min: 25, id: 'standard', name: '标准远征', commonCount: 1, uncommonChance: 0.10, rareChance: 0.06, preciousChance: 0.008, companionChance: 0.005 },
+  { min: 15, id: 'short', name: '林间短途', commonCount: 1, uncommonChance: 0.07, rareChance: 0.03, preciousChance: 0.004, companionChance: 0.001 },
+  { min: 5, id: 'scout', name: '营地侦察', commonCount: 1, uncommonChance: 0.04, rareChance: 0.01, preciousChance: 0.002, companionChance: 0.0001 },
+  { min: 0, id: 'brief', name: '门外散步', commonCount: 1, uncommonChance: 0, rareChance: 0, preciousChance: 0, companionChance: 0 },
 ]
 
 function durationTier(activeSeconds) {
@@ -161,11 +166,13 @@ function seededRandom(seed) {
   }
 }
 
-function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity = 0, ownedSpeciesIds = [], rareBoost = false }) {
+function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity = 0, ownedSpeciesIds = [], rareBoost = false, nightRareBoost = false, companionBoost = false }) {
   const tier = durationTier(activeSeconds)
   const random = seededRandom(String(sessionId) + ':' + activeSeconds)
   const common = LOOT.filter((item) => item.rarity === 'common')
+  const uncommon = LOOT.filter((item) => item.rarity === 'uncommon')
   const rare = LOOT.filter((item) => item.rarity === 'rare')
+  const precious = LOOT.filter((item) => item.rarity === 'precious')
   const drops = []
   for (let index = 0; index < tier.commonCount; index += 1) {
     const item = common[Math.floor(random() * common.length)]
@@ -174,14 +181,17 @@ function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity 
     else drops.push({ item, quantity: 1 })
   }
 
-  const boost = rareBoost ? 0.10 : 0
+  if (tier.uncommonChance > 0 && random() < tier.uncommonChance) drops.push({ item: uncommon[Math.floor(random() * uncommon.length)], quantity: 1 })
+  const boost = (rareBoost ? 0.10 : 0) + (nightRareBoost ? 0.03 : 0)
   const rareChance = Math.min(0.65, tier.rareChance + Math.max(0, Number(rarePity) - 4) * 0.03 + boost)
   const rareFound = tier.rareChance > 0 && (Number(rarePity) >= 9 || random() < rareChance)
   if (rareFound) drops.push({ item: rare[Math.floor(random() * rare.length)], quantity: 1 })
+  const preciousFound = tier.preciousChance > 0 && random() < tier.preciousChance
+  if (preciousFound) drops.push({ item: precious[Math.floor(random() * precious.length)], quantity: 1 })
 
   const unowned = COMPANION_SPECIES.filter((species) => !ownedSpeciesIds.includes(species.id) && species.id !== 'hearth_hound')
-  const companionChance = Math.min(0.55, tier.companionChance + Math.max(0, Number(companionPity) - 3) * 0.025)
-  const companionSpecies = unowned.length && tier.companionChance > 0 && (Number(companionPity) >= 7 || random() < companionChance)
+  const companionChance = Math.min(0.50, tier.companionChance + Math.max(0, Number(companionPity) - 4) * 0.01 + (companionBoost ? 0.10 : 0))
+  const companionSpecies = unowned.length && tier.companionChance > 0 && random() < companionChance
     ? unowned[Math.floor(random() * unowned.length)]
     : null
 
@@ -191,6 +201,7 @@ function rollExpedition({ sessionId, activeSeconds, rarePity = 0, companionPity 
     event: EVENTS[Math.floor(random() * EVENTS.length)],
     drops,
     rareFound,
+    preciousFound,
     rareChance,
     companionSpecies,
     companionChance,

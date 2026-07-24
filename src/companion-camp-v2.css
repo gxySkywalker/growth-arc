@@ -84,5 +84,22 @@
 .camp-v2-rename-dialog input:focus { border-color: #a85835; box-shadow: 0 0 0 2px rgba(193,111,61,.18); }
 .camp-v2-rename-dialog > small { display: block; margin: 6px 0 20px; color: #9b7b60; font-size: 10px; }
 .camp-v2-rename-dialog > div:last-child { display: flex; justify-content: flex-end; gap: 9px; }
+.backpack-card > div:last-child { display: flex; flex-direction: column; margin-top: 13px; }
+.backpack-card .camp-v2-backpack-item { width: 100%; min-height: 48px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 3px; color: var(--ink); border: 0; border-bottom: 1px dashed var(--line); background: transparent; text-align: left; font: inherit; }
+.backpack-card .camp-v2-backpack-item > span { display: grid; place-items: center; width: 26px; height: 26px; color: #8f633c; border: 1px solid #d0ae80; background: #f2dfbd; }
+.backpack-card .camp-v2-backpack-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.backpack-card .camp-v2-backpack-item b { color: #8b644a; font-size: 11px; }
+.backpack-card .camp-v2-backpack-item small { grid-column: 2 / -1; margin-top: -7px; color: #9c8068; font-size: 9px; }
+.backpack-card .camp-v2-backpack-item.can-use { cursor: pointer; }
+.backpack-card .camp-v2-backpack-item.can-use:hover, .backpack-card .camp-v2-backpack-item.can-use:focus-visible { outline: none; background: #ead5af; box-shadow: inset 3px 0 #b76a3e; }
+.backpack-card .camp-v2-backpack-item.collectible { cursor: default; opacity: .88; }
+.backpack-card .camp-v2-backpack-item.uncommon > span { color: #557d59; background: #dbe7d5; border-color: #9bb592; }
+.backpack-card .camp-v2-backpack-item.rare > span { color: #b17a26; background: #f5e0aa; border-color: #d4a34c; }
+.backpack-card .camp-v2-backpack-item.precious > span { color: #f3dfb4; background: #685179; border-color: #b58bce; }
+.camp-v2-item-use-body { display: grid; grid-template-columns: 48px 1fr; gap: 13px; align-items: center; }
+.camp-v2-item-use-body > span { display: grid; place-items: center; width: 44px; height: 44px; color: #af6639; border: 2px solid #bd9365; background: #ead0a3; }
+.camp-v2-item-use-body strong { font-size: 16px; }
+.camp-v2-item-use-body p { margin: 5px 0; color: #855536; font-size: 13px; }
+.camp-v2-item-use-body small { color: var(--muted); font-size: 10px; }
 @media (max-width: 900px) { .camp-v2-layout { grid-template-columns: 1fr; } .camp-v2-dex { order: 2; } .camp-v2-list { display: grid; grid-template-columns: repeat(2, 1fr); } .camp-v2-profile { grid-template-columns: 1fr; } .camp-v2-portrait { min-height: 310px; } .camp-v2-story-grid, .camp-v2-bottom-grid { grid-template-columns: 1fr; } }
 @media (max-width: 580px) { .camp-v2-profile-copy { padding: 25px 20px; } .camp-v2-memory-list { grid-template-columns: 1fr; } .camp-v2-list { grid-template-columns: 1fr; } .camp-v2-growth-line { grid-template-columns: 1fr; gap: 9px; } .camp-v2-growth-line > span { width: 2px; height: 14px; margin-left: 13px; } .camp-v2-growth-line > div, .camp-v2-growth-line > div:nth-of-type(2), .camp-v2-growth-line > div:nth-of-type(3) { text-align: left; } .camp-v2-growth-line > div:nth-of-type(2) i, .camp-v2-growth-line > div:nth-of-type(3) i { margin-inline: 0; } }

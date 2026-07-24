@@ -47,7 +47,7 @@ export function ItemTooltip({ item, quantity, triggerRef, visible }: ItemTooltip
         <div>
           <strong className="item-tooltip-name">{item.name}</strong>
           <span className={`item-tooltip-rarity ${item.rarity}`}>
-            {item.rarity === 'rare' ? '稀有' : '普通'}
+            {{ common: '普通', uncommon: '罕见', rare: '稀有', precious: '珍稀' }[item.rarity]}
           </span>
         </div>
       </div>
@@ -57,7 +57,7 @@ export function ItemTooltip({ item, quantity, triggerRef, visible }: ItemTooltip
         <span className="item-tooltip-effect-text">{lore.effectLabel}</span>
         {lore.consumesItem && <span className="item-tooltip-consume">使用后消耗</span>}
       </div>}
-      {!lore.effectLabel && <p className="item-tooltip-pending">用途仍在旅途中逐渐揭晓</p>}
+      {lore.collectible && <p className="item-tooltip-pending">当前仅可收藏，后续功能开放后不会失去它</p>}
       {quantity !== undefined && <div className="item-tooltip-foot">
         当前持有 <strong>{quantity}</strong> 件
       </div>}

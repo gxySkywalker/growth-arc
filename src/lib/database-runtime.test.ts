@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +12,77 @@ const { getDailyPeriod, getWeeklyPeriod, localDateKey, getReturnKind } = domain
 const tempDirs: string[] = []
 
 afterEach(() => {
+  vi.useRealTimers()
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+describe('expedition loot effects', () => {
+  const addInventory = (database: any, itemId: string, quantity = 1) => {
+    const now = Date.now()
+    database.run('INSERT INTO inventory (item_id, quantity, first_found_at, updated_at) VALUES (?, ?, ?, ?)', [itemId, quantity, now, now])
+  }
+
+  it('uses bread for exactly one bond with the active companion', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-bread-bond-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const companion = database.getCompanionCollection().active
+    addInventory(database, 'berry_bread')
+    database.useItem('berry_bread')
+    expect(database.getCompanion(companion.id).bond_xp).toBe(Number(companion.bond_xp) + 1)
+  })
+
+  it('applies companion-specific keepsakes only to their matching companion', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-keepsake-bond-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    const now = Date.now()
+    database.run('INSERT INTO companions (id, species_id, nickname, personality_profile_json, met_at) VALUES (?, ?, ?, ?, ?)', ['otter-test', 'river_otter', '涟牙', '{}', now])
+    database.run('INSERT INTO companions (id, species_id, nickname, personality_profile_json, met_at) VALUES (?, ?, ?, ?, ?)', ['owl-test', 'moon_owl', '暮羽子', '{}', now])
+    database.run('INSERT INTO companions (id, species_id, nickname, personality_profile_json, met_at) VALUES (?, ?, ?, ?, ?)', ['drake-test', 'ember_drake', '小火牙', '{}', now])
+    addInventory(database, 'river_stone')
+    addInventory(database, 'wind_hill_feather')
+    addInventory(database, 'dragon_scale')
+    database.useItem('river_stone')
+    database.useItem('wind_hill_feather')
+    database.useItem('dragon_scale')
+    expect(database.getCompanion('otter-test').bond_xp).toBe(3)
+    expect(database.getCompanion('owl-test').bond_xp).toBe(3)
+    expect(database.getCompanion('drake-test').bond_xp).toBe(3)
+  })
+
+  it('stores the night compass window and the one-shot expedition flags', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 24, 20, 0, 0))
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-loot-flags-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    addInventory(database, 'moon_compass')
+    addInventory(database, 'star_glass')
+    database.useItem('moon_compass')
+    database.useItem('star_glass')
+    const settings = database.getSettings()
+    expect(Number(settings.night_rare_boost_until)).toBe(new Date(2026, 6, 25, 6, 0, 0).getTime())
+    expect(settings.rare_boost).toBe('1')
+  })
+
+  it('keeps the silver bell boost until an unowned companion is met', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-bell-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    addInventory(database, 'silver_bell')
+    database.useItem('silver_bell')
+    expect(database.getSettings().companion_boost).toBe('1')
+  })
+
+  it('leaves future-system collectibles intact instead of consuming them', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'growth-arc-collectible-'))
+    tempDirs.push(dir)
+    const database = await new StudyDatabase(dir).init()
+    addInventory(database, 'map_scrap')
+    expect(() => database.useItem('map_scrap')).toThrow('目前仅可收藏')
+    expect(database.getInventory().find((entry: any) => entry.item_id === 'map_scrap').quantity).toBe(1)
+  })
 })
 
 describe('AI configuration persistence', () => {
@@ -112,7 +182,7 @@ describe('companion identity', () => {
     const now = Date.now()
     database.run('UPDATE companions SET is_active = 0')
     database.run(`INSERT INTO companions (id, species_id, nickname, bond_xp, stage, evolution_path, personality_profile_json, is_active, met_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['moss-test', 'moss_fox', '狐狸', 190, 1, '', '', 1, now])
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, ['moss-test', 'moss_fox', '狐狸', 199, 1, '', '', 1, now])
     database.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '4')")
     database.save()
 

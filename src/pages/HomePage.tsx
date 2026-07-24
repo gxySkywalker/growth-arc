@@ -5,7 +5,9 @@ import { useApp } from '../context/AppContext'
 import { formatDate, formatDuration, friendlyError } from '../lib/format'
 import { Icon } from '../components/Icon'
 import { ItemTooltip } from '../components/ItemTooltip'
+import { Modal } from '../components/Modal'
 import { startFocus } from '../components/FocusController'
+import { getItemLore } from '../lib/item-lore'
 
 const XP_BARS = 7
 
@@ -234,14 +236,25 @@ function ItemTag({ entry, onUse }: {
 }) {
   const ref = useRef<HTMLSpanElement>(null)
   const [hover, setHover] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [using, setUsing] = useState(false)
+  const lore = getItemLore(entry.item)
   let timer: ReturnType<typeof setTimeout> | null = null
   const show = () => { timer = setTimeout(() => setHover(true), 200) }
   const hide = () => { if (timer) clearTimeout(timer); setHover(false) }
+  const confirmUse = async () => {
+    if (using) return
+    try { setUsing(true); await onUse(); setConfirmOpen(false) } finally { setUsing(false) }
+  }
   return <>
-    <span ref={ref} className={`ov-return-item ${entry.item.rarity}`} onClick={() => { if (window.confirm(`使用「${entry.item.name}」吗？`)) onUse() }} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
+    <span ref={ref} className={`ov-return-item ${entry.item.rarity}`} onClick={() => { if (lore.consumesItem) setConfirmOpen(true) }} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
       <Icon name={entry.item.icon} size={18} />{entry.item.name}<em>×{entry.quantity}</em>
     </span>
     <ItemTooltip item={entry.item} quantity={entry.quantity} triggerRef={ref} visible={hover} />
+    {confirmOpen && <Modal title={`使用「${entry.item.name}」`} onClose={() => !using && setConfirmOpen(false)} className="camp-v2-item-use-modal">
+      <div className="modal-body camp-v2-item-use-body"><span><Icon name={entry.item.icon} size={28} /></span><div><strong>{entry.item.name}</strong><p>{lore.effectLabel}</p><small>使用后会消耗 1 件。</small></div></div>
+      <footer className="modal-footer"><button className="button button-ghost" disabled={using} onClick={() => setConfirmOpen(false)}>暂不使用</button><button className="button button-primary" disabled={using} onClick={() => void confirmUse()}>{using ? '正在使用…' : '确认使用'}</button></footer>
+    </Modal>}
   </>
 }
 

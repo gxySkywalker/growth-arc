@@ -1,235 +1,275 @@
-# 成长轨迹 (Growth Arc) — 项目交接文档 v0.4.0
+# 成长轨迹（Growth Arc）项目交接文档 v0.6.0
 
-> 日期：2026-07-22
-> 状态：邮件模块已冻结，进入 NPC/伙伴系统开发阶段
-
----
-
-## 1. 项目简介
-
-| 项目 | 值 |
-|------|-----|
-| **项目名称** | 成长轨迹 (Growth Arc) |
-| **当前版本** | v0.4.0 — 小天使与旅途记忆：写给旅人的信 |
-| **技术栈** | Electron + React 19 + TypeScript + Vite + sql.js (WASM SQLite) |
-| **定位** | 本地优先、单用户的像素RPG生活记录软件。玩家在学习的同时与一个温暖的中世纪边境世界共同生活。 |
-| **核心体验** | 每次远征后，住在邮局二楼的小天使会整理当天的旅途，写下一封温暖的信。 |
-
-**核心循环**：开始远征 → 专注计时 → 返程结算 → 第二天打开App → 收到小天使的信
+> 面向下一位长期维护开发者。请先阅读本文件，再阅读 `docs/WORLD_BIBLE.md`、`docs/COMPANION_PRODUCTION_RULES.md`、各伙伴档案与天使邮局文档。
+> 当前阶段：天使邮局已冻结；伙伴系统 v2 已完成八位伙伴的规则、数据迁移与正式美术接入。
+> 重要：这不是效率工具，也不是宠物养成器。任何后续实现都必须服从世界观与长期陪伴体验。
 
 ---
 
-## 2. 当前版本状态
+## 1. 项目定位
 
-| 项目 | 值 |
-|------|-----|
-| Git 分支 | `master` |
-| 最新 commit | `588e8e1` |
-| 最新 Release | `v0.4.0` on GitHub |
-| 已完成模块 | 天使邮局（完整生命周期）、小天使叙事系统、AI信件系统、键盘导航系统、世界状态系统 |
+### 游戏类型
 
----
+**成长轨迹**是本地优先、单人游玩的像素生活 RPG / 旅途记录游戏。技术形态是 Electron 桌面应用，但玩家体验应始终是：在一个温暖的中世纪边境世界生活、出发、归来，并被世界记住。
 
-## 3. 技术架构
+### 核心体验
 
-```
-项目目录:
-  src/                React 前端 (Vite + TypeScript)
-    pages/            页面组件
-    components/       通用组件 (FocusController, LetterViewer, Icon, ...)
-    lib/              纯函数 (audio, navState, inputContext, mailMock, observatory, ...)
-    context/          React Context (AppContext)
-    hooks/            (已删除，useRosterNav 废弃)
-    *.css             样式文件
-  electron/           Electron 主进程 (CommonJS)
-    main.cjs          主进程入口，IPC handler 注册，AI 调用
-    preload.cjs       contextBridge → window.growthArc
-    database.cjs      sql.js 数据库 (CRUD, migration, seed, mail lifecycle)
-    domain.cjs        纯函数 (XP, dates, letter templates, world state, festivals)
-    game.cjs          游戏系统 (expedition roll, companions, loot)
-    prompts/          AI prompt 资源文件
-  public/             静态资源 (音频、字体)
-  assets/             美术资源 (像素图、参考图)
-  docs/               设计文档
-  scripts/            开发脚本 (test-mail-lifecycle, test-ai-narrative)
-
-关键约束:
-  - 无 router: 页面切换为 useState<PageId>
-  - CommonJS (electron/) + ESM (src/)
-  - sql.js WASM 需 asarUnpack
-  - API Key 使用 Windows DPAPI 加密存储 (secret.bin)，不进 SQLite
-  - 数据库 migration 使用 schema_version 版本控制 + PRAGMA table_info
-  - 像素字体: Fusion Pixel SC
-  - 图表配色: 星光蓝 #8FBCCC + 黄铜 #C39755
+```text
+炉火小屋（家）
+  → 小镇与道路
+  → 出征探索
+  → 与伙伴同行、发现世界
+  → 回到小屋
+  → 邮局、编年史与伙伴共同保存这段时间
 ```
 
----
+目标不是把现实行为量化成成绩，而是让玩家感到：
 
-## 4. 核心业务设计
+> 我走过的路、停留过的时刻，以及陪我走过的人，都被好好记得。
 
-### 4.1 天使邮局 — 邮件生命周期
+### 参考作品
 
-**所有邮件由 App 启动时自动生成，不依赖 UI 触发。**
+- **宝可梦 / Pokémon**：相遇感、收集欲、个体差异、成长进化、图鉴式长期记忆；只参考设计精神，不复制角色、名称、技能或世界设定。
+- **星露谷物语 / Stardew Valley**：家的归属感、安静的日常陪伴、季节与环境叙事、不会惩罚离开。
+- **动物森友会 / Animal Crossing**：时间积累的关系、伙伴如居民般生活、不催促玩家回归。
 
-```
-App 启动
-  ├─ database.init() → migration → seed
-  ├─ ensureWelcomeLetter()         welcome:first_visit (幂等)
-  ├─ ensurePeriodicLetters(now)    daily + weekly 扫描
-  ├─ ensureEventLetters(now)       归灯节节点检查
-  ├─ ensureBirthdayLetter(now)     生日检查
-  └─ ensureAiNarratives()          AI叙事 (后台异步, 不阻塞窗口)
-```
+### 设计哲学
 
-**PostOfficePage 只读取数据 (mail:list → mail:get)，不触发生成。**
-
-#### Daily (每日星笺)
-- 触发: App 启动时扫描 lastDaily+1 至 yesterday
-- 条件: shouldGenerateDailyLetter — 有效远征 (short/expedition/deep) 或有复盘记录
-- 空白日不生成，离线回来自动补发
-- 幂等: UNIQUE(letter_type, period_key)
-- 标题: "7月20日的星页"
-- 正文: 小天使人格叙事模板 (无数据报告语言)
-
-#### Weekly (旅途札记)
-- 周期: 周一 00:00 ~ 周日 23:59
-- 条件: 完整周结束 + 该周有有效远征
-- 标题: "旅途札记" (列表) / "7月13日—7月20日的旅途札记" (详情)
-- 寄出日期: periodEnd (下周一)
-
-#### Festival (归灯节)
-- 日期: 每年 11/7-11/16
-- 节点: Day1 opening (灯火初燃) / Day5 midway (旧灯回响) / Day10 climax (归灯夜)
-- 过滤: playerStartYear ≥ firstYear，不生成玩家进入世界之前的节庆
-- 幂等: letter_events.event_key UNIQUE
-
-#### Birthday (生日信)
-- 条件: birthday_date ≥ world_entered_at AND birthday_date ≤ now
-- event_key: birthday:{year}，每年一封
-- 迟到送达: 生日当天未登录，之后首次启动补发 (同年内)
-
-#### Welcome Letter (欢迎信)
-- 触发: 首次启动时生成 (welcome:first_visit)
-- 发件人: 小天使
-- 日期: world_entered_at (玩家进入世界当天)
-- 分类: 纪念来信
-
-### 4.2 小天使叙事系统
-
-**小天使人格**：住在邮局二楼朝西的小房间，窗台上有一盆莉娅送的花。每天傍晚整理信件、盖邮戳、封蜡。邮袋有点大，拖在地上的时候比背起来多。灯油是奥伦每月分给她的。
-
-**世界状态系统** (`getWorldState(periodKey)`)：纯函数，根据日期确定性计算世界状态。窗框会响→艾达来修→修好；花会发芽→开花→凋谢；归灯节期间镇上挂灯。未来可扩展 NPC、地点、事件。
-
-**模板信**：无 AI Key 时使用。60-100字叙事风格，不提数据统计。季节感知 (春夏秋冬)，天气变化，小天使动作细节 (盖邮戳、拖邮袋、整理木格)。
-
-**AI 信**：有 Key 时使用。同一套小天使人格 prompt，用真实 API 生成。失败自动降级为模板信。
+1. 玩家不是被管理者，而是旅人。
+2. 世界不是仪表盘，而是会回应旅人的地方。
+3. 伙伴不是收益来源，而是一起经历一段时间的朋友。
+4. 邮局不是通知中心，而是小天使替旅人整理事实、保存记忆的地方。
+5. 离开不应带来惩罚；归来应当被温柔地接住。
 
 ---
 
-## 5. AI 系统
+## 2. 当前完成版本：v0.6.0
 
-```
-用户填写钥匙 → safeStorage.encryptString → secret.bin
-App 启动 → readApiKey() → safeStorage.decryptString
-  → ensureAiNarratives() (后台异步)
-    → generateLetterNarrative(letter)
-      → fetch API (OpenAI/DeepSeek 兼容接口)
-      → 成功: body_source='ai', ai_status='success'
-      → 失败: ai_status='failed', retry++, 3次后放弃
-      → 无Key: 跳过，使用模板信
+> `package.json` 的产品版本与子系统版本历史可能不同；本阶段交接口径为 **v0.6.0 伙伴系统版本**。不要未经明确要求修改 package 版本号。
+
+### v0.6.0 主要新增
+
+- **伙伴羁绊系统**
+  - 保留内部 `bond_xp`，但玩家看到的是关系章节与共同走过的时间。
+  - 每 100 羁绊进入下一成长阶段：`0–99` 初始、`100–199` 成长、`200+` 最终。
+  - 伙伴改名后保留自定义昵称；未改名的伙伴会随成长阶段自动使用阶段名称。
+
+- **伙伴成长体系**
+  - 成长是关系与陪伴方式的变化，绝不是战斗强化、属性升级或收益提升。
+  - 栗子有基于成长发生时间的三个最终方向；其余已完成伙伴为唯一最终形态。
+  - 成长事件使用宝可梦式“形态切换 + 白光 + 对话框”的仪式感表现；远征和喂食等真实羁绊来源达到阈值时都可触发。
+
+- **多伙伴生态**
+  - Species（物种）与 Companion Instance（玩家自己的个体）分离。
+  - 个体拥有 `personalityTrait`、物种专属 `habit` 与 `quirk`；三者只影响互动文本、编年史和共同记忆描述。
+  - 每个伙伴有独立生态位、情感关键词、生活习惯池、美术生产资源与 PixiJS 小屋表现。
+
+### 当前技术状态
+
+- 前端：React 19 + TypeScript + Vite。
+- 桌面端：Electron；数据层为 `sql.js` WASM SQLite。
+- 主目录：
+
+```text
+electron/       主进程、IPC、数据库迁移、领域与游戏逻辑
+src/            React 页面、PixiJS 小屋、组件、运行时纯函数
+assets/art/     正式像素资源、源草稿、资源清单
+scripts/        美术图集处理与验证脚本
+docs/           世界观、系统冻结文档、角色档案
 ```
 
-**状态机**: pending → success/failed/template/skipped/quota_exceeded
-**失败策略**: 最多重试3次，每次启动重试，不阻塞窗口创建
-**默认**: 无 Key 时完全不调用 AI，模板信正常工作
+- PixiJS 小屋已是当前小屋渲染层；伙伴会按已激活伙伴、成长阶段和对应 walk atlas 显示。
+- 伙伴营地页面为同行图鉴、伙伴档案、共同记忆与改名入口；不是“宠物管理后台”。
+- 天使邮局 v0.7.x 已冻结：不要擅自改生命周期、AI 调用链、世界状态与叙事边界。
+- 最近基线：`npm test` 为 **222 项通过**；`npm run build` 通过。Vite 有主 chunk 大小警告，当前不阻塞。
+
+### 关键文件入口
+
+| 范围 | 主要文件 |
+| --- | --- |
+| 伙伴物种定义与成长路径 | `electron/game.cjs` |
+| 伙伴数据迁移、个体差异、名称迁移 | `electron/database.cjs` |
+| 伙伴营地 | `src/pages/GrowthPage.tsx`、`src/companion-camp-v2.css` |
+| 肖像自动选择 | `src/lib/companion-camp-portrait.ts` |
+| 小屋世界层 | `src/components/PixiCottageScene.tsx` |
+| 像素伙伴组件 | `src/components/PixelCompanion.tsx` 及各 `*Sprite.tsx` |
+| 美术资源约束 | `assets/art/manifest.json`、`scripts/validate-art-assets.mjs` |
+| 伙伴生产规则 | `docs/COMPANION_PRODUCTION_RULES.md` |
 
 ---
 
-## 6. 数据库设计
+## 3. 已确定伙伴体系
 
-### letters
-| 字段 | 说明 |
-|------|------|
-| letter_type | daily/weekly/festival/memorial/world |
-| period_key | 周期标识 (UNIQUE with letter_type) |
-| fact_json | 事实层 (不可变，schemaVersion=2) |
-| template_body | 模板正文 (始终存在) |
-| ai_body | AI 正文 (可选) |
-| body_source | 'template' / 'ai' |
-| ai_status | pending/success/failed/template/skipped/quota_exceeded |
-| ai_retry_count | 重试次数 |
+### 全局规则
 
-### letter_events
-| 字段 | 说明 |
-|------|------|
-| event_key | UNIQUE, 如 returning_lights:2026:opening |
-| letter_id | FK → letters(id) ON DELETE SET NULL |
+- 所有非初始伙伴维持现有的**随机相遇概率**；随机的是相遇时机，不是“掉落奖励”。
+- 栗子是玩家抵达边境前就同行的旧旅伴，**不是**新手赠送宠物或收养剧情。
+- 同物种未来可以有不同个体；当前的个体差异只写入文本与记忆，不改变强度。
+- 每个伙伴必须拥有不同的：身体符号 + 动作语言 + 环境关系 + 情感关键词。
 
-### settings (邮件相关)
-- `world_entered_at_ms` — 玩家进入世界时间
-- `schema_version` — 迁移版本号 (当前 V3)
-- `last_daily_period_checked` / `last_weekly_period_checked` — 扫描游标
-- `birthday_month` / `birthday_day` / `birthday_updated_at` — 生日设置
+| 伙伴 / 成长线 | 核心情感定位 | 栖息环境 | 与其他伙伴的区别 | 美术关键词 |
+| --- | --- | --- | --- | --- |
+| **栗子**：炉尾 → 栗鬃 → 炭尾 / 松影 / 月爪 | 被等待的归处；“世界很陌生，但不是第一次有人陪我走路。” | 炉火小屋、旧路、边境道路 | 犬型、闻路、等待、回头确认；唯一与归途和旧旅伴直接绑定 | 犬型低重心、栗色、炉灰奶油胸斑、旧铜铃、褪色布结；最终形态更高大稳重 |
+| **枝绒 → 苔亚 → 森冠** | 陌生的地方，也会慢慢变成熟悉的地方 | 林缘、苔石、树根、雨后森林 | 不带路、不寻宝；只让玩家注意到森林细微变化 | 修长狐型、雨后苔绿、灰绿、奶油白、叶片纹理、柔软狐尾 |
+| **灯团 → 星烛 → 夜璃** | 夜里也可以安静地同处 | 窗边、静室、夜间小屋、微暗道路 | 不是照明工具；尾端光只是陪伴，不引导、不侦察 | 深靛蓝猫型、月纹与星点、淡紫领毛、暖金灯尾；最终形态星夜感更完整 |
+| **涟牙 → 漪爪 → 湾澜** | 旅途不只有抵达，沿途流过的时间也值得被记住 | 河湾、浅滩、旧石桥、雨后河岸 | 不渡河、不找资源；陪玩家在河边停留，听水流经过 | 圆润水獭、河流蓝青、鹅卵石浅腹、湿润水纹、宽厚扁尾与水光 |
+| **小石獾 → 岩甲獾 → 铠獾王** | 先把脚下站稳，也是一段旅途 | 石阶、石墙、山脚、旧矿道边缘 | 不做护甲/战斗单位；代表崎岖处安静可靠的停留 | 低重心獾型、黑灰白、岩层背毛、石块纹理、宽厚前爪；最终体型沉稳厚重 |
+| **暮羽子 → 咕夜枭 → 冥翔鹰鸮** | 有些还没说出口的念头，也值得被安静地留在一页夜色里 | 旧钟塔、书塔、山路石碑、高处木栏、夜间林缘 | 不照路、不送信、不查线索；侧头倾听、远望、收拢翅膀 | 宽圆鸮型、旧纸色眼周羽纹、深墨蓝/灰紫翼羽、克制星点；最终展翼像厚旧书页 |
+| **小丘 → 云丘兔 → 风茸旅兔** | 远方很宽，慢一点也不会错过 | 开阔丘陵、风车古道、晒暖草坡、云影掠过的高地 | 不赶路、不送信、不报天气；停下听风、长耳随风偏转、轻跳后回望 | 圆润短身、长垂耳、短绒尾；奶油白、云灰与浅麦金；最终形态更轻盈舒展 |
+| **小火牙 → 赤翼龙 → 余烬古龙** | 有些辽阔不必立刻弄懂，也值得带着敬意靠近 | 边境群山、远山雾谷、自然蜕鳞处、未完整绘入地图的山脊 | 不飞行运输、不喷火战斗、不寻宝；收拢翼膜、侧头听远山、看向未抵达的山脊 | 幼龙四足轮廓、收拢翼膜、深铜与灰褐鳞片、极少余烬亮点；最终仍是年轻古龙 |
 
----
+### 已冻结角色文档
 
-## 7. 已完成版本决策 (不可重新讨论)
+请优先阅读：
 
-以下设计已经过反复迭代确认，**不要重新设计**:
+- `docs/COMPANION_PRODUCTION_RULES.md`
+- `docs/COMPANION_DUSK_OWL_PROFILE.md`
+- 其他已建立的伙伴档案与 `docs/WORLD_BIBLE.md`
 
-1. 邮件由 App 启动时自动生成，不是 UI 触发生成
-2. AI 失败不能影响游戏正常运行 (降级模板信)
-3. 模板信必须保持世界观 (不提数据统计、不用现代词汇)
-4. 技术词不能进入游戏文本 (API、token、模型等词禁止)
-5. 空分类永远显示，不根据内容隐藏 (邮局分类是固定格子)
-6. 小天使是叙事角色，不是系统通知 (第一人称，手写信风格)
-7. 世界状态是纯函数 (不依赖数据库，确定性)
-8. AI Key 使用 DPAPI 加密存储，不进入 SQLite
-9. 邮件模块已冻结，修改需要明确原因记录在 `docs/mail-system-v0.7.md`
+后续设计不可复用上述伙伴的专属生态位。例如狐狸不能拿走栗子的“旧路/归途”，鸟类不能拿走灯团的“暖灯陪伴”，水獭不能承担枝绒的“森林观察”。
 
 ---
 
-## 8. 当前待办 (未来模块)
+## 4. 世界观原则（不可违反）
 
-- **NPC 系统**: 友人来信分类 (letter_type='world')，居民关系，商队事件
-- **成就系统**: 纪念来信扩展
-- **年度回顾信**: fact_json memory 字段已预留
-- **更多节庆**: FESTIVALS 配置扩展 (春节、冬星节等)
-- **小天使 CSS sprite**: 美术资产
-- **邮局 header 背景**: 美术资产
-- **月光/节日信封 PNG**: 美术资产
+### 伙伴不是工具
+
+禁止将伙伴设计为：
+
+- 工具型宠物、自动生产机器、装备、战斗单位；
+- 资源收益、掉率、经验、速度、效率或属性加成来源；
+- 必须打卡、喂食、清洁、上线才不会惩罚玩家的模拟对象；
+- 逼迫玩家选择“最优伙伴”的数值系统。
+
+伙伴应当是：
+
+> 在这个世界中生活，并与旅人共享一段时间的朋友。
+
+### 伙伴可影响什么
+
+允许：
+
+- 让玩家从不同角度注意到真实世界环境；
+- 改变 E 键互动文本、编年史描述、共同记忆语气；
+- 在小屋、远征和返回时形成生活化存在感；
+- 以羁绊成长、肖像和四方向图保留长期记忆。
+
+禁止：
+
+- 编造玩家未完成的经历、未遇见的地点或不存在的 NPC；
+- 评价努力程度、效率、表现、坚持或情绪；
+- 使用 KPI、效率、任务管理、数据报告等现代产品语言。
+
+### 与邮局的关系
+
+天文台记录事实；编年史保存真实经历；邮局由小天使将事实整理成信。伙伴可以成为共同记忆的一部分，但不能替邮局、天文台或系统工作，不能被写成“功能助手”。
 
 ---
 
-## 9. 开发规范
+## 5. 美术生产规范
 
-### 修改前
-1. 阅读 `CLAUDE.md` 和本文件
-2. 运行 `npm test` 确认基线通过 (188 tests)
-3. 理解当前架构后再动手
+完整规范以 `docs/COMPANION_SPRITE_ATLAS_SPEC.md` 与 `docs/COMPANION_PRODUCTION_RULES.md` 为准。
 
-### 代码风格
-- 保持世界观语言 (游戏文本不使用技术词)
-- 不随意重构 (优先增量修改)
-- 优先用户体验而非技术实现
-- 新功能必须有自动化测试
+### 资源包规范
 
-### 发布前
-```bash
-npx tsc --noEmit   # TypeScript 检查
-npm test           # 188 tests
-npm run build      # 生产构建
+每个成长阶段只需要：
+
+1. 一张营地肖像 `*_camp_portrait_v1.png`；
+2. 一张原始四方向 4×4 walk sheet；
+3. 从原图生成的运行时 `walk_32` 与 PixiJS 使用的 `walk_48`。
+
+运行时图集固定为：
+
+```text
+第 1 行：front_0, front_1, front_2, front_3
+第 2 行：back_0,  back_1,  back_2,  back_3
+第 3 行：left_0,  left_1,  left_2,  left_3
+第 4 行：right_0, right_1, right_2, right_3
 ```
+
+### 裁切与清晰度
+
+- **必须保留原始生图**到 `assets/art/drafts/<species>-forms/`，不可直接覆盖。
+- 由 `scripts/prepare-<species>-forms.mjs` 生成运行时图集。
+- 只清除与图片边缘连通的浅白/灰色棋盘背景，避免吃掉角色的白色毛发、腹部和高光。
+- 每格按内容边界裁切，再使用 **nearest-neighbor** 统一缩放、水平居中、脚底固定到同一基线。
+- 禁止 bilinear、bicubic、抗锯齿、模糊、自由拉伸或直接把整张带大留白的原图压到 32 像素。
+- 新资产接入后必须更新 `assets/art/manifest.json`，运行 `npm run art:validate`。
+
+### 生成图建议
+
+- 最好一次生成一张严格的 4×4 原始图；每格尺寸、边距、脚底位置一致。
+- 透明背景优先；若生成器不能稳定给透明背景，可给干净白/浅灰棋盘背景，由生产脚本边缘透明化。
+- 角色四周留出稳定边距，**不要让翅膀、尾巴或爪子跨越网格边线**。
+- 风格：GBA 时代像素 RPG、清晰外轮廓、有限色板、无抗锯齿、无文字、无投影烘焙进角色图。
+
+### 动画原则（新增伙伴必须遵守）
+
+- 所有伙伴只维护 walk 四方向、每方向 4 帧；不为天气、读信、返程、个性单独增加动画树。
+- **普通伙伴**：四帧应有清晰、可感知的步幅与身体重心变化，不能像滑冰。
+- **飞行伙伴**：四帧表现持续飞行/拍翼/滑翔，不落地、不画成四肢走路；脚底基线仍用于画面稳定，而非表示落地。
+- 成长阶段通过更成熟的轮廓与显示比例表达；不是简单放大，也不做战斗威吓。
+
+---
+
+## 6. 命名规则
+
+伙伴名称参考宝可梦式命名感：
+
+- 短；
+- 容易读、容易记、适合玩家口语称呼；
+- 有画面与轮廓感；
+- 名字应能支持初始 → 成长 → 最终形态的自然递进。
+
+避免：
+
+- 像物品、装备、材料或功能按钮；
+- 像技能、职业、职位、称号或系统标签；
+- “守护者、寻路者、探索者、使者、灵宠、XX兽”等职业化后缀；
+- 为了奇幻而过度堆砌的长名称；
+- 与现有伙伴核心词相撞（例如新名字不要再与“炉尾”混淆）。
+
+命名必须先通过四项检查：是否好念、是否有画面、是否会误导生态位、是否与现有伙伴区分清楚。
+
+---
+
+## 7. 下一步开发计划
+
+### 下一阶段目标
+
+首批八位伙伴已经形成完整生态。下一阶段应在不破坏既有生态位的前提下，推进首个美术垂直切片与伙伴互动文本的真实共同记忆覆盖。
+
+### 推荐顺序
+
+1. 先做“伙伴视觉生态冲突检查”：避免继续使用犬/狐/猫/獾/水獭/鸮的身体符号、旧路/森林观察/暖灯/河流/石阶/夜色的环境主题。
+2. 为每位新伙伴先冻结：物种类别、成长线、一个核心身体符号、一个核心动作、一个核心情感、栖息环境、专属 habit 池。
+3. 写入 `electron/game.cjs`、`electron/database.cjs`、世界圣经与独立角色档案；迁移必须保留老存档自定义昵称和已有个体信息。
+4. 再生成每阶段肖像与原始 4×4 walk 图，按美术脚本接入 32/48 runtime atlas。
+5. 接入伙伴营地、图鉴、编年史图标与 PixiJS 小屋；不得只替换列表图标而遗漏成长阶段肖像或小屋图集。
+6. 每次执行：
+
+```powershell
+npm test
+npm run art:validate
+npm run build
+```
+
+### 继续开发的红线
+
+- 不重新设计或破坏已冻结的八位伙伴生态位。
+- 不把新伙伴变成收益最优解。
+- 不新增复杂 AI 宠物行为树、每日强制互动或离线惩罚。
+- 不擅自改天使邮局生命周期、AI 链路、世界状态系统或 package 版本。
+- 不跳过数据库兼容性测试；旧档的自定义昵称、羁绊、成长路径和共同记忆必须保留。
 
 ### 新会话启动提示
 
-```
-加载项目成长轨迹 (Growth Arc)。Electron + React 19 + Vite + sql.js，当前 v0.4.0。
-运行: npm run dev, npm test (188 tests), npm run build。
-请阅读 CLAUDE.md 和 docs/PROJECT_HANDOFF.md。
-邮件模块 (天使邮局) 已冻结，详见 docs/mail-system-v0.7.md。
-当前可开发: NPC系统、成就系统、伙伴扩展、美术资产、年度回顾信。
-不要修改邮件生成逻辑、AI调用链、世界状态系统。
-保持世界观语言，禁止技术词进入游戏文本。
-修改前先运行 npm test 确认基线。
+```text
+加载项目“成长轨迹”。先阅读 docs/PROJECT_HANDOFF.md、docs/WORLD_BIBLE.md、
+docs/COMPANION_PRODUCTION_RULES.md 与相关伙伴档案。
+
+当前处于 v0.6.0 伙伴系统阶段：八位伙伴均已冻结并接入正式资源。不要修改其生态位、成长规则、存档兼容策略或美术图集合同。
+伙伴不是数值工具、收益来源或宠物模拟器；核心是同行、生活与共同记忆。
+不要修改已冻结的天使邮局逻辑、伙伴成长规则、数据库兼容策略或 package 版本。
+每次资源接入必须保留原图、按统一裁切规范生成 atlas，并运行 npm test、npm run art:validate、npm run build。
 ```

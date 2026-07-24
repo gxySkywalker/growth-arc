@@ -120,7 +120,7 @@ export interface CompanionGrowthEvent {
 export interface LootItem {
   id: string
   name: string
-  rarity: 'common' | 'rare'
+  rarity: 'common' | 'uncommon' | 'rare' | 'precious'
   icon: string
   description: string
 }

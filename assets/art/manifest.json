@@ -420,6 +420,186 @@
       ]
     },
     {
+      "id": "moon-owl-stage-0-camp-portrait-v1",
+      "path": "characters/companions/moon_owl_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "暮羽子营地肖像；宽圆鸮型剪影、页角眼周羽纹与墨蓝星点翼羽为识别点",
+        "边缘连通的白灰背景已透明化，保留旧纸色羽纹与低饱和星点"
+      ]
+    },
+    {
+      "id": "moon-owl-stage-0-walk-32-v1",
+      "path": "characters/companions/moon_owl_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "暮羽子四行四列：front、back、left、right；每行四帧",
+        "按统一内容裁切、共用脚底基线与 nearest-neighbor 缩放生成；用于小屋、营地与编年史图标"
+      ]
+    },
+    {
+      "id": "moon-owl-stage-1-camp-portrait-v1",
+      "path": "characters/companions/moon_owl_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "咕夜枭营地肖像；由 companion.stage=1 自动选择",
+        "翼羽层次更加清晰，以更大显示比例表达同行记忆，不提供数值强化"
+      ]
+    },
+    {
+      "id": "moon-owl-stage-1-walk-32-v1",
+      "path": "characters/companions/moon_owl_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "咕夜枭四行四列：front、back、left、right；每行四帧",
+        "与暮羽子共用脚底基线，并按成长阶段以略大比例显示"
+      ]
+    },
+    {
+      "id": "moon-owl-dusk-owl-camp-portrait-v1",
+      "path": "characters/companions/moon_owl_dusk_owl_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "冥翔鹰鸮唯一最终成长肖像；由 evolution_path=dusk_owl 自动选择",
+        "展翼像合开的厚旧书页，记录共同远望的夜色，而不是战斗或职业强化"
+      ]
+    },
+    {
+      "id": "moon-owl-dusk-owl-walk-32-v1",
+      "path": "characters/companions/moon_owl_dusk_owl_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "冥翔鹰鸮四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-stage-0-camp-portrait-v1",
+      "path": "characters/companions/cloud_rabbit_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "小丘营地肖像；长垂耳、短绒尾与云影绒毛层次为核心识别点",
+        "边缘连通的白灰背景已透明化，保留奶油白毛发和耳尖云团细节"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-stage-0-walk-32-v1",
+      "path": "characters/companions/cloud_rabbit_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "小丘四行四列：front、back、left、right；每行四帧",
+        "按统一内容裁切、共用脚底基线与 nearest-neighbor 缩放生成"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-stage-1-camp-portrait-v1",
+      "path": "characters/companions/cloud_rabbit_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "云丘兔营地肖像；由 companion.stage=1 自动选择",
+        "更舒展的长耳与背部绒毛表达同行关系的变化，不代表能力强化"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-stage-1-walk-32-v1",
+      "path": "characters/companions/cloud_rabbit_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "云丘兔四行四列：front、back、left、right；每行四帧",
+        "与小丘共用脚底基线，并按成长阶段以略大比例显示"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-wind-tuft-rabbit-camp-portrait-v1",
+      "path": "characters/companions/cloud_rabbit_wind_tuft_rabbit_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "风茸旅兔唯一最终成长肖像；由 evolution_path=wind_tuft_rabbit 自动选择",
+        "云层般的耳缘与绒毛记录开阔草坡上的同行，不代表天气或赶路能力"
+      ]
+    },
+    {
+      "id": "cloud-rabbit-wind-tuft-rabbit-walk-32-v1",
+      "path": "characters/companions/cloud_rabbit_wind_tuft_rabbit_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "风茸旅兔四行四列：front、back、left、right；每行四帧",
+        "Pixi 小屋按最终成长尺寸渲染，与前两阶段共用脚底基线"
+      ]
+    },
+    {
+      "id": "ember-drake-stage-0-camp-portrait-v1",
+      "path": "characters/companions/ember_drake_stage-0_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "小火牙营地肖像；幼龙四足轮廓、收拢翼膜与余烬鳞纹为核心识别点",
+        "深色渐变背景已从边缘连通区域透明化，保留深铜鳞片与暖色角尖"
+      ]
+    },
+    {
+      "id": "ember-drake-stage-0-walk-32-v1",
+      "path": "characters/companions/ember_drake_stage-0_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "小火牙四行四列：front、back、left、right；每行四帧地面行走",
+        "按统一内容裁切、共用脚底基线与 nearest-neighbor 缩放生成"
+      ]
+    },
+    {
+      "id": "ember-drake-stage-1-camp-portrait-v1",
+      "path": "characters/companions/ember_drake_stage-1_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "赤翼龙营地肖像；由 companion.stage=1 自动选择",
+        "更完整的翼膜代表成长后的低空飞行，不表示运输或战斗能力"
+      ]
+    },
+    {
+      "id": "ember-drake-stage-1-walk-32-v1",
+      "path": "characters/companions/ember_drake_stage-1_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "赤翼龙四行四列：front、back、left、right；每行四帧低空飞行",
+        "与小火牙共用视觉基线；Pixi 小屋以轻微悬浮表现飞行"
+      ]
+    },
+    {
+      "id": "ember-drake-final-camp-portrait-v1",
+      "path": "characters/companions/ember_drake_ember_drake_camp_portrait_v1.png",
+      "role": "approved-runtime-camp-portrait",
+      "status": "approved-character-design",
+      "notes": [
+        "余烬古龙唯一最终成长肖像；由 evolution_path=ember_drake 自动选择",
+        "成熟翼膜与余烬鳞纹表现对远方的敬意，不代表成年龙或战斗神兽"
+      ]
+    },
+    {
+      "id": "ember-drake-final-walk-32-v1",
+      "path": "characters/companions/ember_drake_ember_drake_walk_32_v1.png",
+      "role": "approved-runtime-sprite-atlas",
+      "status": "production-candidate",
+      "notes": [
+        "余烬古龙四行四列：front、back、left、right；每行四帧低空飞行",
+        "Pixi 小屋按最终成长尺寸悬浮显示，与前两阶段共享视觉基线"
+      ]
+    },
+    {
       "id": "player-walk-32x48-v1",
       "path": "characters/player/player_walk_32x48_v1.png",
       "role": "approved-runtime-sprite-atlas",

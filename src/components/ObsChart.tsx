@@ -52,7 +52,12 @@ export function ObsChart({ option, className, empty, emptyText }: Props) {
     inst.current.setOption(opts, { notMerge: true, lazyUpdate: false })
   }, [option, empty])
 
-  if (empty) return <div className="obs-empty">{emptyText || '暂无数据'}</div>
-
-  return <div ref={ref} className={className} style={{ width: '100%', height: '100%', minHeight: 120 }} />
+  // Keep the chart host mounted even while data is empty. Previously the
+  // first render could have no host, so the one-time init effect returned;
+  // when async data arrived later ECharts had no chance to initialize until
+  // the user left and re-entered this page.
+  return <div className={className} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 120 }}>
+    <div ref={ref} style={{ width: '100%', height: '100%' }} />
+    {empty ? <div className="obs-empty" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>{emptyText || '暂无数据'}</div> : null}
+  </div>
 }

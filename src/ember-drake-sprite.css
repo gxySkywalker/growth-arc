@@ -1,0 +1,9 @@
+.ember-drake-sprite { position: relative; display: inline-block; flex: 0 0 auto; image-rendering: pixelated; }
+.ember-drake-sprite-frame { display: block; width: 100%; height: 100%; background-repeat: no-repeat; background-size: 400% 400%; image-rendering: pixelated; }
+.ember-drake-sprite-small { width: 48px; height: 48px; }
+.ember-drake-sprite-medium { width: 72px; height: 72px; }
+.ember-drake-sprite-large { width: 96px; height: 96px; }
+.ember-drake-sprite-scene { width: 100%; height: 100%; }
+.ember-drake-sprite-grown { transform: translateY(-4px) scale(1.28); transform-origin: center bottom; }
+.ember-drake-sprite-final { transform: translateY(-6px) scale(1.55); transform-origin: center bottom; }
+.ember-drake-sleep-pixels { position: absolute; right: -4px; top: -4px; color: #fff1a2; font-style: normal; font-size: 11px; }

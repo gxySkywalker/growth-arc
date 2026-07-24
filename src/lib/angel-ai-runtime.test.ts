@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 // @ts-expect-error Electron helper is CommonJS and intentionally shared with tests.
 import angelAi from '../../electron/angel-ai.cjs'
 
-const { buildNarrativeFactEnvelope, generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody } = angelAi
+const { buildNarrativeFactEnvelope, generateAngelNarrative, isAngelNarrativeEligible, shouldUseAiBody, resolveAngelAiConfig } = angelAi
 const prompt = '小天使提示词'
 const letter = {
   id: 'letter-1', letter_type: 'daily', period_key: '2026-07-20', period_start: 1, period_end: 2,
@@ -94,6 +94,17 @@ describe('angel AI runtime', () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '信。' } }] }) })
     await generateAngelNarrative({ letter, apiKey: 'key', prompt, fetchImpl, settings: { api_provider: 'custom', ai_base_url: 'https://example.test/v1/' } })
     expect(fetchImpl.mock.calls[0][0]).toBe('https://example.test/v1/chat/completions')
+  })
+
+  it('uses a provider default URL instead of a stale custom endpoint', () => {
+    expect(resolveAngelAiConfig({ api_provider: 'deepseek', model: 'deepseek-chat', ai_base_url: 'https://old-proxy.example/v1' }))
+      .toMatchObject({ provider: 'deepseek', model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/v1' })
+  })
+
+  it.each(['daily', 'weekly'])('can polish each eligible %s letter with the configured provider', async (letterType) => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '小天使已经记下这段旅途。' } }] }) })
+    const result = await generateAngelNarrative({ letter: { ...letter, letter_type: letterType }, apiKey: 'key', prompt, fetchImpl, settings: { api_provider: 'deepseek', model: 'deepseek-chat' } })
+    expect(result).toMatchObject({ success: true, status: 'success', provider: 'deepseek', model: 'deepseek-chat' })
   })
 
   it('keeps template fallback states for an invalid key, quota limit, and timeout', async () => {

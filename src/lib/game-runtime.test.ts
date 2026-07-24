@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error The Electron game module is CommonJS and intentionally shared with tests.
 import game from '../../electron/game.cjs'
 
-const { durationTier, rollExpedition, companionStage, evolutionReady, growthPathForCompanion, COMPANION_SPECIES } = game
+const { durationTier, rollExpedition, companionStage, evolutionReady, growthPathForCompanion, COMPANION_SPECIES, LOOT } = game
 
 describe('expedition rules', () => {
   it('improves reward tiers with healthy duration caps', () => {
@@ -12,12 +12,22 @@ describe('expedition rules', () => {
     expect(durationTier(240 * 60).rareChance).toBe(0.20)
   })
 
-  it('is deterministic and guarantees pity rewards', () => {
+  it('is deterministic and keeps the rare pity guarantee independent from companion encounters', () => {
     const first = rollExpedition({ sessionId: 'same-session', activeSeconds: 45 * 60, rarePity: 9, companionPity: 7, ownedSpeciesIds: ['hearth_hound'] })
     const second = rollExpedition({ sessionId: 'same-session', activeSeconds: 45 * 60, rarePity: 9, companionPity: 7, ownedSpeciesIds: ['hearth_hound'] })
     expect(second).toEqual(first)
     expect(first.rareFound).toBe(true)
-    expect(first.companionSpecies).not.toBeNull()
+    expect(first.companionChance).toBeCloseTo(0.04)
+  })
+
+  it('has the four loot grades and applies expedition boosts to the correct rolls', () => {
+    expect(LOOT.filter((item: { rarity: string }) => item.rarity === 'common')).toHaveLength(4)
+    expect(LOOT.filter((item: { rarity: string }) => item.rarity === 'uncommon')).toHaveLength(2)
+    expect(LOOT.filter((item: { rarity: string }) => item.rarity === 'rare')).toHaveLength(4)
+    expect(LOOT.filter((item: { rarity: string }) => item.rarity === 'precious')).toHaveLength(2)
+    const boosted = rollExpedition({ sessionId: 'boosted', activeSeconds: 5 * 60, ownedSpeciesIds: ['hearth_hound'], rareBoost: true, nightRareBoost: true, companionBoost: true })
+    expect(boosted.rareChance).toBeCloseTo(0.14)
+    expect(boosted.companionChance).toBeCloseTo(0.1001)
   })
 
   it('uses fixed bond chapters and resolves final growth from local time', () => {
